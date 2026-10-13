@@ -49,6 +49,8 @@
     </dependencies>
 
     <build>
+        <sourceDirectory>avilaos/src/main/java</sourceDirectory>
+        <testSourceDirectory>avilaos/src/test/java</testSourceDirectory>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
