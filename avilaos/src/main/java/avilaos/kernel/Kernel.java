@@ -68,6 +68,7 @@ public class Kernel {
 
         handleDeadlines();
         memoryManager.checkNewQueue(scheduler);
+        checkPreemption();
 
         if (cpu.isIdle()) {
             PCB next = scheduler.selectNext();
@@ -86,6 +87,32 @@ public class Kernel {
         }
 
         handleBlockedProcesses();
+    }
+
+    private void checkPreemption() {
+        if (cpu.isIdle() || scheduler.isReadyEmpty()) {
+            return;
+        }
+
+        PCB running = cpu.getCurrentProcess();
+        SchedulingPolicy policy = scheduler.getPolicy();
+
+        if (policy instanceof PriorityPreemptivePolicy ppp) {
+            PCB bestCandidate = policy.selectNext(scheduler.getReadyQueue());
+            if (bestCandidate != null && ppp.shouldPreempt(running, bestCandidate)) {
+                running.setState(ProcessState.READY);
+                scheduler.addToReady(running);
+                cpu.contextSwitch(null);
+            }
+        } else if (policy instanceof EDFPolicy) {
+            PCB bestCandidate = policy.selectNext(scheduler.getReadyQueue());
+            if (bestCandidate != null && running.getDeadline() > 0 &&
+                bestCandidate.getDeadline() > 0 && bestCandidate.getDeadline() < running.getDeadline()) {
+                running.setState(ProcessState.READY);
+                scheduler.addToReady(running);
+                cpu.contextSwitch(null);
+            }
+        }
     }
 
     private void handleDeadlines() {

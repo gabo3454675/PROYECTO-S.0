@@ -1,8 +1,11 @@
 package avilaos.kernel.sync;
 
+import avilaos.model.enumeration.BlockReason;
+import avilaos.model.enumeration.ProcessState;
 import avilaos.model.pcb.PCB;
-import avilaos.util.datastructures.Queue;
+import avilaos.util.datastructures.AssociativeList;
 import avilaos.util.datastructures.LinkedQueue;
+import avilaos.util.datastructures.Queue;
 
 import java.util.function.Consumer;
 
@@ -17,6 +20,14 @@ public class Buffer {
     private final long memoryUsed;
     private final int networkLatencyCycles;
 
+    // Etapas de operación por PCB ID:
+    // -1 = Esperando latencia de red
+    //  0 = Esperando recurso de conteo (semEmpty o semFull)
+    //  1 = Recurso de conteo adquirido, procediendo a mutex y sección crítica
+    private final AssociativeList<Long, Integer> activePuts;
+    private final AssociativeList<Long, Integer> activeGets;
+    private final Object bufferLock = new Object();
+
     public Buffer(String id, int capacity, int hostComputerId, Consumer<PCB> onUnblockCallback, int networkLatencyCycles) {
         this.id = id;
         this.capacity = capacity;
@@ -27,6 +38,8 @@ public class Buffer {
         this.semFull = new Semaphore(0);
         this.memoryUsed = (long) capacity * 1024;
         this.networkLatencyCycles = Math.max(0, networkLatencyCycles);
+        this.activePuts = new AssociativeList<>();
+        this.activeGets = new AssociativeList<>();
 
         // Set unblock callback on all semaphores
         semMutex.setOnUnblockCallback(onUnblockCallback);
@@ -45,61 +58,113 @@ public class Buffer {
     }
 
     public boolean put(PCB producer, Object item) throws InterruptedException {
-        boolean isRemote = producer.getComputerId() != hostComputerId;
+        synchronized (bufferLock) {
+            boolean isRemote = producer.getComputerId() != hostComputerId;
+            Integer stage = activePuts.get(producer.getId());
 
-        if (isRemote) {
-            producer.setState(avilaos.model.enumeration.ProcessState.BLOCKED);
-            producer.setBlockReason(avilaos.model.enumeration.BlockReason.NETWORK_LATENCY);
-            producer.setNetworkLatencyRemaining(networkLatencyCycles);
+            // 1. Manejo de latencia de red remota
+            if (isRemote && networkLatencyCycles > 0) {
+                if (stage == null) {
+                    producer.setState(ProcessState.BLOCKED);
+                    producer.setBlockReason(BlockReason.NETWORK_LATENCY);
+                    producer.setNetworkLatencyRemaining(networkLatencyCycles);
+                    activePuts.put(producer.getId(), -1);
+                    return false;
+                } else if (stage == -1) {
+                    if (producer.getBlockReason() == BlockReason.NETWORK_LATENCY || producer.getNetworkLatencyRemaining() > 0) {
+                        return false;
+                    }
+                    stage = 0;
+                    activePuts.put(producer.getId(), 0);
+                }
+            } else if (stage == null) {
+                stage = 0;
+                activePuts.put(producer.getId(), 0);
+            }
+
+            // 2. Esperar espacio libre (semEmpty) si aún no ha adquirido el permiso
+            if (stage == 0) {
+                semEmpty.wait(producer);
+                if (producer.getState() == ProcessState.BLOCKED &&
+                    producer.getBlockReason() == BlockReason.SEMAPHORE_WAIT) {
+                    activePuts.put(producer.getId(), 1);
+                    return false;
+                }
+                stage = 1;
+                activePuts.put(producer.getId(), 1);
+            }
+
+            // 3. Adquirir exclusión mutua (semMutex)
+            semMutex.wait(producer);
+            if (producer.getState() == ProcessState.BLOCKED &&
+                producer.getBlockReason() == BlockReason.SEMAPHORE_WAIT) {
+                return false;
+            }
+
+            // 4. Sección crítica: inserción en el buffer acotado
+            elements.enqueue(item);
+            activePuts.remove(producer.getId());
+
+            semMutex.signal();
+            semFull.signal();
+
+            return true;
         }
-
-        semEmpty.wait(producer);
-        if (producer.getState() == avilaos.model.enumeration.ProcessState.BLOCKED &&
-            producer.getBlockReason() == avilaos.model.enumeration.BlockReason.SEMAPHORE_WAIT) {
-            return false;
-        }
-
-        semMutex.wait(producer);
-        if (producer.getState() == avilaos.model.enumeration.ProcessState.BLOCKED &&
-            producer.getBlockReason() == avilaos.model.enumeration.BlockReason.SEMAPHORE_WAIT) {
-            semEmpty.signal();
-            return false;
-        }
-
-        elements.enqueue(item);
-        semMutex.signal();
-        semFull.signal();
-
-        return true;
     }
 
     public Object get(PCB consumer) throws InterruptedException {
-        boolean isRemote = consumer.getComputerId() != hostComputerId;
+        synchronized (bufferLock) {
+            boolean isRemote = consumer.getComputerId() != hostComputerId;
+            Integer stage = activeGets.get(consumer.getId());
 
-        if (isRemote) {
-            consumer.setState(avilaos.model.enumeration.ProcessState.BLOCKED);
-            consumer.setBlockReason(avilaos.model.enumeration.BlockReason.NETWORK_LATENCY);
-            consumer.setNetworkLatencyRemaining(networkLatencyCycles);
+            // 1. Manejo de latencia de red remota
+            if (isRemote && networkLatencyCycles > 0) {
+                if (stage == null) {
+                    consumer.setState(ProcessState.BLOCKED);
+                    consumer.setBlockReason(BlockReason.NETWORK_LATENCY);
+                    consumer.setNetworkLatencyRemaining(networkLatencyCycles);
+                    activeGets.put(consumer.getId(), -1);
+                    return null;
+                } else if (stage == -1) {
+                    if (consumer.getBlockReason() == BlockReason.NETWORK_LATENCY || consumer.getNetworkLatencyRemaining() > 0) {
+                        return null;
+                    }
+                    stage = 0;
+                    activeGets.put(consumer.getId(), 0);
+                }
+            } else if (stage == null) {
+                stage = 0;
+                activeGets.put(consumer.getId(), 0);
+            }
+
+            // 2. Esperar elemento disponible (semFull) si aún no ha adquirido el permiso
+            if (stage == 0) {
+                semFull.wait(consumer);
+                if (consumer.getState() == ProcessState.BLOCKED &&
+                    consumer.getBlockReason() == BlockReason.SEMAPHORE_WAIT) {
+                    activeGets.put(consumer.getId(), 1);
+                    return null;
+                }
+                stage = 1;
+                activeGets.put(consumer.getId(), 1);
+            }
+
+            // 3. Adquirir exclusión mutua (semMutex)
+            semMutex.wait(consumer);
+            if (consumer.getState() == ProcessState.BLOCKED &&
+                consumer.getBlockReason() == BlockReason.SEMAPHORE_WAIT) {
+                return null;
+            }
+
+            // 4. Sección crítica: extracción del elemento
+            Object item = elements.dequeue();
+            activeGets.remove(consumer.getId());
+
+            semMutex.signal();
+            semEmpty.signal();
+
+            return item;
         }
-
-        semFull.wait(consumer);
-        if (consumer.getState() == avilaos.model.enumeration.ProcessState.BLOCKED &&
-            consumer.getBlockReason() == avilaos.model.enumeration.BlockReason.SEMAPHORE_WAIT) {
-            return null;
-        }
-
-        semMutex.wait(consumer);
-        if (consumer.getState() == avilaos.model.enumeration.ProcessState.BLOCKED &&
-            consumer.getBlockReason() == avilaos.model.enumeration.BlockReason.SEMAPHORE_WAIT) {
-            semFull.signal();
-            return null;
-        }
-
-        Object item = elements.dequeue();
-        semMutex.signal();
-        semEmpty.signal();
-
-        return item;
     }
 
     public String getId() {
@@ -115,7 +180,9 @@ public class Buffer {
     }
 
     public int getCurrentSize() {
-        return elements.size();
+        synchronized (bufferLock) {
+            return elements.size();
+        }
     }
 
     public Semaphore getSemMutex() {
@@ -135,17 +202,27 @@ public class Buffer {
     }
 
     public boolean isFull() {
-        return elements.size() >= capacity;
+        synchronized (bufferLock) {
+            return elements.size() >= capacity;
+        }
     }
 
     public boolean isEmpty() {
-        return elements.isEmpty();
+        synchronized (bufferLock) {
+            return elements.isEmpty();
+        }
+    }
+
+    public int getNetworkLatencyCycles() {
+        return networkLatencyCycles;
     }
 
     @Override
     public String toString() {
-        return String.format("Buffer{id='%s', size=%d/%d, host=%d, empty=%d, full=%d, mutex=%d}",
-                id, elements.size(), capacity, hostComputerId,
-                semEmpty.getValue(), semFull.getValue(), semMutex.getValue());
+        synchronized (bufferLock) {
+            return String.format("Buffer{id='%s', size=%d/%d, host=%d, empty=%d, full=%d, mutex=%d}",
+                    id, elements.size(), capacity, hostComputerId,
+                    semEmpty.getValue(), semFull.getValue(), semMutex.getValue());
+        }
     }
 }
