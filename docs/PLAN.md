@@ -6,8 +6,8 @@
 |--------|--------|--------|
 | Semana 1 - Fundación | Completada | `77fac39` |
 | Semana 2 - Kernel | Completada | `170ca8a` |
-| Semana 3 - Sincronización | Pendiente | - |
-| Semana 4 - GUI + Cierre | Pendiente | - |
+| Semana 3 - Sincronización y Políticas | Completada | `63ca653` |
+| Semana 4 - GUI + Persistencia + Cierre | Pendiente | - |
 
 ---
 
@@ -17,11 +17,11 @@
 
 ### Tareas
 
-- [ ] `Semaphore`: wait(PCB), signal(), cola de espera, mutex interno
-- [ ] `Buffer`: put(), get(), capacidad acotada, orden crítico (evitar deadlock)
-- [ ] `SyncManager`: gestión de buffers, latencia de red configurable
-- [ ] Acceso remoto: si process.computerId != buffer.hostComputerId, bloquear N ciclos (NETWORK_LATENCY)
-- [ ] Tests: 1 buffer cap=5, 2 productores, 2 consumidores, sin deadlocks
+- [x] `Semaphore`: wait(PCB), signal(), cola de espera, mutex interno
+- [x] `Buffer`: put(), get(), capacidad acotada, orden crítico (evitar deadlock)
+- [x] `SyncManager`: gestión de buffers, latencia de red configurable
+- [x] Acceso remoto: si process.computerId != buffer.hostComputerId, bloquear N ciclos (NETWORK_LATENCY)
+- [x] Tests: 1 buffer cap=5, 2 productores, 2 consumidores, sin deadlocks
 
 ### Commits esperados
 - `feat: semáforo propio con wait/signal y cola de espera`
@@ -30,9 +30,9 @@
 - `test: pruebas de buffers y semáforos`
 
 ### Hecho cuando
-- [ ] Productor-consumidor funciona sin deadlocks
-- [ ] Acceso remoto bloquea y desbloquea correctamente
-- [ ] `mvn clean test` pasa
+- [x] Productor-consumidor funciona sin deadlocks
+- [x] Acceso remoto bloquea y desbloquea correctamente
+- [x] `mvn clean test` pasa (46 tests pasando sin errores)
 
 ---
 
