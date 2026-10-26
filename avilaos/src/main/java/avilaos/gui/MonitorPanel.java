@@ -16,6 +16,8 @@ import java.awt.*;
 
 public class MonitorPanel extends JPanel {
 
+    private static final long BYTES_PER_MB = 1024L * 1024L;
+
     private final Kernel kernel;
 
     // Componentes del Control Superior
@@ -197,8 +199,9 @@ public class MonitorPanel extends JPanel {
 
         // Actualizar ocupación de memoria RAM
         RAM ram = (kernel.getComputer() != null) ? kernel.getComputer().getRam() : null;
-        long totalMem = (ram != null) ? ram.getTotalSize() : 1024L;
-        long usedMem = (ram != null) ? ram.getUsedSize() : 0L;
+        // RAM guarda bytes internamente; la vista muestra MB
+        long totalMem = (ram != null) ? ram.getTotalSize() / BYTES_PER_MB : 1024L;
+        long usedMem = (ram != null) ? ram.getUsedSize() / BYTES_PER_MB : 0L;
         int percent = (totalMem > 0) ? (int) ((usedMem * 100) / totalMem) : 0;
         barMemory.setValue(Math.min(percent, 100));
         barMemory.setString(usedMem + " MB / " + totalMem + " MB (" + percent + "%)");
