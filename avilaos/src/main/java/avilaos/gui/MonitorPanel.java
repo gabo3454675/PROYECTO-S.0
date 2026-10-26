@@ -66,7 +66,7 @@ public class MonitorPanel extends JPanel {
         cbPolicy = new JComboBox<>(SchedulingPolicyType.values());
         cbPolicy.addActionListener(e -> changePolicy());
 
-        btnAdvanceCycle = new JButton("▶ Avanzar 1 Ciclo");
+        btnAdvanceCycle = new JButton("Avanzar 1 Ciclo");
         btnAdvanceCycle.addActionListener(e -> advanceCycle());
 
         topPanel.add(lblCurrentCycle);
