@@ -38,7 +38,7 @@ public class ConfigManagerTest {
     public void testSaveAndLoadConfig() {
         try {
             // 1. Agregar buffers y procesos iniciales
-            kernel.getSyncManager().createBuffer("buf_1", 0, 10);
+            kernel.getSyncManager().createBuffer("buf_1", 10, 0);
 
             ProcessType defaultType = (ProcessType.values().length > 0) ? ProcessType.values()[0] : null;
             PCB process = new PCB("Process_Test", 0, defaultType, 1, 100L, 50L, 50L);

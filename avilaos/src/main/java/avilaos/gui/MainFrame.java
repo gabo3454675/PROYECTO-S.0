@@ -7,7 +7,6 @@ import avilaos.model.enumeration.SchedulingPolicyType;
 
 import javax.swing.*;
 import java.io.File;
-import java.io.IOException;
 
 /**
  * Ventana Principal de ÁvilaOS con pestañas para Vista 1 (Configuración) y Vista 2 (Monitor).
@@ -20,7 +19,7 @@ public class MainFrame extends JFrame {
 
     public MainFrame() {
         Computer computer = new Computer(0, 1024L, SchedulingPolicyType.FCFS, 2);
-        this.kernel = new Kernel(computer, SchedulingPolicyType.FCFS, 2);
+        this.kernel = computer.getKernel();
 
         initUI();
     }
@@ -45,6 +44,8 @@ public class MainFrame extends JFrame {
         tabbedPane.addChangeListener(e -> {
             if (tabbedPane.getSelectedIndex() == 1) {
                 monitorPanel.updateMonitor();
+            } else if (tabbedPane.getSelectedIndex() == 0) {
+                configPanel.refreshTables();
             }
         });
 
@@ -83,8 +84,8 @@ public class MainFrame extends JFrame {
 
             try {
                 ConfigManager.saveConfigToJson(path, kernel);
-                JOptionPane.showMessageDialog(this, "Configuración guardada en:\n" + path, "Éxito", JOptionPane.INFORMATION_MESSAGE);
-            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(this, "Configuración guardada exitosamente en:\n" + path, "Éxito", JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception ex) {
                 JOptionPane.showMessageDialog(this, "Error al guardar: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
         }
@@ -97,28 +98,28 @@ public class MainFrame extends JFrame {
             File fileToLoad = fileChooser.getSelectedFile();
             try {
                 ConfigManager.loadConfigFromJson(fileToLoad.getAbsolutePath(), kernel);
+                configPanel.refreshTables();
                 monitorPanel.updateMonitor();
-                JOptionPane.showMessageDialog(this, "Configuración cargada con éxito.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Configuración cargada y validada con éxito.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, "Error al cargar: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Error al cargar la configuración:\n" + ex.getMessage(), "Error de Validación / Carga", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
 
-public static void main(String[] args) {
-    try {
-        // Look and Feel nativo oscuro de Swing / FlatLaf si está disponible
-        for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
-            if ("Nimbus".equalsIgnoreCase(info.getName())) {
-                UIManager.setLookAndFeel(info.getClassName());
-                break;
+    public static void main(String[] args) {
+        try {
+            for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
+                if ("Nimbus".equalsIgnoreCase(info.getName())) {
+                    UIManager.setLookAndFeel(info.getClassName());
+                    break;
+                }
             }
-        }
-    } catch (Exception ignored) {}
+        } catch (Exception ignored) {}
 
-    SwingUtilities.invokeLater(() -> {
-        MainFrame frame = new MainFrame();
-        frame.setVisible(true);
-    });
-}
+        SwingUtilities.invokeLater(() -> {
+            MainFrame frame = new MainFrame();
+            frame.setVisible(true);
+        });
+    }
 }

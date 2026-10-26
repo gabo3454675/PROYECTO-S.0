@@ -1,8 +1,13 @@
 package avilaos.gui;
 
+import avilaos.core.hardware.CPU;
+import avilaos.core.hardware.RAM;
 import avilaos.kernel.Kernel;
-import avilaos.model.pcb.PCB;
+import avilaos.kernel.sync.Buffer;
+import avilaos.model.enumeration.BlockReason;
 import avilaos.model.enumeration.SchedulingPolicyType;
+import avilaos.model.pcb.PCB;
+import avilaos.util.datastructures.List;
 import avilaos.util.datastructures.Queue;
 
 import javax.swing.*;
@@ -74,7 +79,7 @@ public class MonitorPanel extends JPanel {
 
         // CPU & Memoria
         JPanel statusPanel = new JPanel(new GridLayout(1, 2, 10, 0));
-        
+
         // Estado CPU
         JPanel cpuPanel = new JPanel(new GridLayout(3, 2, 5, 5));
         cpuPanel.setBorder(BorderFactory.createTitledBorder("CPU (Proceso en Ejecución)"));
@@ -91,11 +96,11 @@ public class MonitorPanel extends JPanel {
 
         // Estado Memoria
         JPanel memPanel = new JPanel(new BorderLayout(5, 5));
-        memPanel.setBorder(BorderFactory.createTitledBorder("Ocupación de Memoria Principal"));
+        memPanel.setBorder(BorderFactory.createTitledBorder("Ocupación de Memoria Principal (RAM)"));
         barMemory = new JProgressBar(0, 100);
         barMemory.setStringPainted(true);
-        barMemory.setValue(25);
-        barMemory.setString("250 KB / 1000 KB (25%)");
+        barMemory.setValue(0);
+        barMemory.setString("0 MB / 1024 MB (0%)");
         memPanel.add(barMemory, BorderLayout.CENTER);
 
         statusPanel.add(cpuPanel);
@@ -106,9 +111,9 @@ public class MonitorPanel extends JPanel {
         // Tablas de Colas (NEW, READY, BLOCKED, TERMINATED)
         JPanel queuesPanel = new JPanel(new GridLayout(2, 2, 10, 10));
 
-        newQueueModel = new DefaultTableModel(new String[]{"ID", "Nombre", "Prioridad"}, 0);
-        readyQueueModel = new DefaultTableModel(new String[]{"ID", "Nombre", "Prioridad"}, 0);
-        blockedQueueModel = new DefaultTableModel(new String[]{"ID", "Nombre", "Motivo / Semáforo"}, 0);
+        newQueueModel = new DefaultTableModel(new String[]{"ID", "Nombre", "Prioridad", "Memoria (MB)"}, 0);
+        readyQueueModel = new DefaultTableModel(new String[]{"ID", "Nombre", "Prioridad", "Restante"}, 0);
+        blockedQueueModel = new DefaultTableModel(new String[]{"ID", "Nombre", "Motivo de Bloqueo"}, 0);
         termQueueModel = new DefaultTableModel(new String[]{"ID", "Nombre", "Estado"}, 0);
 
         queuesPanel.add(createTablePanel("Cola NEW", newQueueModel));
@@ -119,9 +124,9 @@ public class MonitorPanel extends JPanel {
         centerPanel.add(queuesPanel, BorderLayout.CENTER);
 
         // Tablas de Buffers
-        buffersModel = new DefaultTableModel(new String[]{"ID Buffer", "Ocupación", "Capacidad", "Bloqueados"}, 0);
+        buffersModel = new DefaultTableModel(new String[]{"ID Buffer", "Host", "Ocupación", "Capacidad", "Bloqueados"}, 0);
         JPanel bufferContainer = createTablePanel("Estado de Buffers / Sincronización", buffersModel);
-        bufferContainer.setPreferredSize(new Dimension(200, 100));
+        bufferContainer.setPreferredSize(new Dimension(200, 110));
 
         centerPanel.add(bufferContainer, BorderLayout.SOUTH);
 
@@ -138,7 +143,7 @@ public class MonitorPanel extends JPanel {
         add(logPanel, BorderLayout.SOUTH);
     }
 
-private JPanel createTablePanel(String title, DefaultTableModel model) {
+    private JPanel createTablePanel(String title, DefaultTableModel model) {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createTitledBorder(title));
         JTable table = new JTable(model);
@@ -153,65 +158,16 @@ private JPanel createTablePanel(String title, DefaultTableModel model) {
         if (kernel != null) {
             long nextCycle = kernel.getCurrentCycle() + 1;
             kernel.executeCycle(nextCycle);
-            appendLog("Ciclo " + nextCycle + ": Ejecutado ciclo de simulación.");
+            appendLog("Ciclo " + nextCycle + ": Ciclo de reloj ejecutado.");
             updateMonitor();
         }
     }
 
-private void changePolicy() {
+    private void changePolicy() {
         SchedulingPolicyType selectedPolicy = (SchedulingPolicyType) cbPolicy.getSelectedItem();
-        if (selectedPolicy != null && kernel != null && kernel.getScheduler() != null) {
-            // Nombres posibles según la estructura del proyecto
-            String[] possiblePackages = {
-                "avilaos.kernel.scheduler.",
-                "avilaos.kernel.scheduler.policy."
-            };
-
-            String className = "";
-            switch (selectedPolicy) {
-                case FCFS:
-                    className = "FCFSPolicy";
-                    break;
-                case ROUND_ROBIN:
-                    className = "RoundRobinPolicy";
-                    break;
-                case EDF:
-                    className = "EDFPolicy";
-                    break;
-                case PRIORITY_PREEMPTIVE:
-                    className = "PriorityPreemptivePolicy";
-                    break;
-                default:
-                    break;
-            }
-
-            if (!className.isEmpty()) {
-                boolean instantiated = false;
-                for (String pkg : possiblePackages) {
-                    try {
-                        Class<?> clazz = Class.forName(pkg + className);
-                        Object policyObj;
-                        if (selectedPolicy == SchedulingPolicyType.ROUND_ROBIN) {
-                            policyObj = clazz.getConstructor(int.class).newInstance(2);
-                        } else {
-                            policyObj = clazz.getDeclaredConstructor().newInstance();
-                        }
-
-                        if (policyObj instanceof avilaos.model.interfaces.SchedulingPolicy) {
-                            kernel.getScheduler().setPolicy((avilaos.model.interfaces.SchedulingPolicy) policyObj);
-                            appendLog("Política de planificación cambiada a: " + selectedPolicy);
-                            instantiated = true;
-                            break;
-                        }
-                    } catch (Exception ignored) {
-                        // Intenta con la siguiente ruta si el paquete difiere
-                    }
-                }
-
-                if (!instantiated) {
-                    appendLog("No se pudo instanciar la política: " + className);
-                }
-            }
+        if (selectedPolicy != null && kernel != null) {
+            kernel.changeSchedulingPolicy(selectedPolicy, 2);
+            appendLog("Política de planificación cambiada a: " + selectedPolicy.getDisplayName());
             updateMonitor();
         }
     }
@@ -221,14 +177,16 @@ private void changePolicy() {
 
         lblCurrentCycle.setText("Ciclo Actual: " + kernel.getCurrentCycle());
 
-        // Actualizar datos de CPU si hay un proceso en ejecución
-        PCB currentPcb = kernel.getScheduler() != null ? kernel.getScheduler().selectNext() : null;
+        // Actualizar datos de CPU de forma pasiva (sin alterar el planificador)
+        CPU cpu = (kernel.getComputer() != null) ? kernel.getComputer().getCpu() : null;
+        PCB currentPcb = (cpu != null) ? cpu.getCurrentProcess() : null;
+
         if (currentPcb != null) {
             lblCpuProcess.setText("Proceso: " + currentPcb.getName() + " (ID: " + currentPcb.getId() + ")");
             lblCpuPC.setText("PC: " + currentPcb.getProgramCounter());
             lblCpuPriority.setText("Prioridad: " + currentPcb.getPriority());
             lblCpuDeadline.setText("Deadline: " + currentPcb.getDeadline());
-            lblCpuMode.setText("Modo: Usuario");
+            lblCpuMode.setText("Modo: " + (cpu.getMode() != null ? cpu.getMode() : "Usuario"));
         } else {
             lblCpuProcess.setText("Proceso: Ninguno (IDLE)");
             lblCpuPC.setText("PC: 0");
@@ -237,13 +195,25 @@ private void changePolicy() {
             lblCpuMode.setText("Modo: Sistema Operativo");
         }
 
-        // Actualizar Colas
-        refreshQueueTable(kernel.getNewQueue(), newQueueModel);
-        refreshQueueTable(kernel.getReadyQueue(), readyQueueModel);
-        refreshQueueTable(kernel.getTerminatedQueue(), termQueueModel);
+        // Actualizar ocupación de memoria RAM
+        RAM ram = (kernel.getComputer() != null) ? kernel.getComputer().getRam() : null;
+        long totalMem = (ram != null) ? ram.getTotalSize() : 1024L;
+        long usedMem = (ram != null) ? ram.getUsedSize() : 0L;
+        int percent = (totalMem > 0) ? (int) ((usedMem * 100) / totalMem) : 0;
+        barMemory.setValue(Math.min(percent, 100));
+        barMemory.setString(usedMem + " MB / " + totalMem + " MB (" + percent + "%)");
+
+        // Actualizar Colas de Estados
+        refreshQueueTable(kernel.getNewQueue(), newQueueModel, true);
+        refreshQueueTable(kernel.getReadyQueue(), readyQueueModel, false);
+        refreshQueueTable(kernel.getTerminatedQueue(), termQueueModel, false);
+        refreshBlockedQueuesTable();
+
+        // Actualizar Tabla de Buffers
+        refreshBuffersTable();
     }
 
-    private void refreshQueueTable(Queue<PCB> queue, DefaultTableModel model) {
+    private void refreshQueueTable(Queue<PCB> queue, DefaultTableModel model, boolean isNewQueue) {
         model.setRowCount(0);
         if (queue == null) return;
 
@@ -251,9 +221,54 @@ private void changePolicy() {
         for (int i = 0; i < size; i++) {
             PCB pcb = queue.dequeue();
             if (pcb != null) {
-                model.addRow(new Object[]{pcb.getId(), pcb.getName(), pcb.getPriority()});
+                if (isNewQueue) {
+                    model.addRow(new Object[]{pcb.getId(), pcb.getName(), pcb.getPriority(), pcb.getMemoryRequired()});
+                } else {
+                    model.addRow(new Object[]{pcb.getId(), pcb.getName(), pcb.getPriority(), pcb.getRemainingTime()});
+                }
                 queue.enqueue(pcb);
             }
+        }
+    }
+
+    private void refreshBlockedQueuesTable() {
+        blockedQueueModel.setRowCount(0);
+        if (kernel.getAllBlockedQueues() == null) return;
+
+        List<Queue<PCB>> blockedList = kernel.getAllBlockedQueues();
+        for (int i = 0; i < blockedList.size(); i++) {
+            Queue<PCB> q = blockedList.get(i);
+            if (q == null) continue;
+            int qSize = q.size();
+            for (int j = 0; j < qSize; j++) {
+                PCB pcb = q.dequeue();
+                if (pcb != null) {
+                    String reason = (pcb.getBlockReason() != null) ? pcb.getBlockReason().name() : "I/O / Semáforo";
+                    blockedQueueModel.addRow(new Object[]{pcb.getId(), pcb.getName(), reason});
+                    q.enqueue(pcb);
+                }
+            }
+        }
+    }
+
+    private void refreshBuffersTable() {
+        buffersModel.setRowCount(0);
+        if (kernel.getSyncManager() == null || kernel.getSyncManager().getAllBuffers() == null) return;
+
+        List<Buffer> buffers = kernel.getSyncManager().getAllBuffers();
+        for (int i = 0; i < buffers.size(); i++) {
+            Buffer b = buffers.get(i);
+            int blockedCount = 0;
+            if (b.getSemEmpty() != null) blockedCount += b.getSemEmpty().getWaitingCount();
+            if (b.getSemFull() != null) blockedCount += b.getSemFull().getWaitingCount();
+
+            buffersModel.addRow(new Object[]{
+                    b.getId(),
+                    b.getHostComputerId(),
+                    b.getCurrentSize(),
+                    b.getCapacity(),
+                    blockedCount
+            });
         }
     }
 
@@ -261,8 +276,8 @@ private void changePolicy() {
         txtLog.append(text + "\n");
         txtLog.setCaretPosition(txtLog.getDocument().getLength());
     }
-    
-private void applyDarkDashboardStyle() {
+
+    private void applyDarkDashboardStyle() {
         Color bgColor = new Color(24, 28, 36);         // Fondo principal oscuro (#181C24)
         Color cardColor = new Color(34, 40, 52);       // Fondo tarjetas (#222834)
         Color textColor = new Color(220, 225, 230);    // Texto claro
@@ -305,7 +320,6 @@ private void applyDarkDashboardStyle() {
             scroll.getViewport().setBackground(cardBg);
             scroll.setBackground(cardBg);
             scroll.setBorder(BorderFactory.createLineBorder(new Color(55, 65, 80)));
-            // Si el scroll no tiene dimensión definida, asignamos una mínima para evitar colapso
             if (scroll.getPreferredSize().height < 90) {
                 scroll.setPreferredSize(new Dimension(150, 110));
             }
@@ -333,5 +347,5 @@ private void applyDarkDashboardStyle() {
         } else if (comp instanceof JComboBox || comp instanceof JButton) {
             comp.setFont(font);
         }
-    }    
+    }
 }
