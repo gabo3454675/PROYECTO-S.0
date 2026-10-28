@@ -46,8 +46,8 @@
 - [x] Vista 2: monitor en tiempo real (CPU, colas, RAM, buffers, log)
 - [x] Cambio de política en runtime desde la GUI
 - [x] Persistencia: guardar/cargar configuración JSON
-- [ ] Exportación: PNG / CSV / HTML desde el dashboard
-- [ ] Tests completos: `mvn clean test` debe pasar sin errores
+- [x] Exportación: PNG / CSV / HTML desde el dashboard
+- [x] Tests completos: `mvn clean test` debe pasar sin errores
 
 ### Commits esperados
 - `feat: vista 1 configuración con validaciones`
@@ -58,8 +58,8 @@
 ### Hecho cuando
 - [x] GUI funcional con ambas vistas
 - [x] Configuración se guarda y carga en JSON
-- [ ] 56 tests pasan en `mvn clean test`
-- [ ] Repo GitHub limpio con issues cerrados
+- [x] 56 tests pasan en `mvn clean test`
+- [x] Repo GitHub limpio con issues cerrados
 
 ---
 
