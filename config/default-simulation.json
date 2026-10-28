@@ -1,0 +1,80 @@
+{
+  "cycleDurationMs" : 100,
+  "networkLatencyCycles" : 2,
+  "computers" : [ {
+    "id" : 0,
+    "ramSizeMB" : 1024,
+    "initialPolicy" : "FCFS",
+    "quantum" : 2
+  }, {
+    "id" : 1,
+    "ramSizeMB" : 2048,
+    "initialPolicy" : "ROUND_ROBIN",
+    "quantum" : 4
+  } ],
+  "processes" : [ {
+    "name" : "KernelWorker",
+    "instructions" : 150,
+    "memoryRequired" : 128,
+    "priority" : 1,
+    "deadline" : 100,
+    "type" : "CPU_BOUND",
+    "computerId" : 0,
+    "bufferId" : null,
+    "produceConsumeInterval" : 0,
+    "elementsRequired" : 0
+  }, {
+    "name" : "ImageProcessor",
+    "instructions" : 200,
+    "memoryRequired" : 256,
+    "priority" : 2,
+    "deadline" : 120,
+    "type" : "CPU_BOUND",
+    "computerId" : 1,
+    "bufferId" : null,
+    "produceConsumeInterval" : 0,
+    "elementsRequired" : 0
+  }, {
+    "name" : "ProducerA",
+    "instructions" : 80,
+    "memoryRequired" : 64,
+    "priority" : 3,
+    "deadline" : 90,
+    "type" : "PRODUCER",
+    "computerId" : 0,
+    "bufferId" : "buf_alpha",
+    "produceConsumeInterval" : 2,
+    "elementsRequired" : 5
+  }, {
+    "name" : "ConsumerA",
+    "instructions" : 90,
+    "memoryRequired" : 64,
+    "priority" : 3,
+    "deadline" : 95,
+    "type" : "CONSUMER",
+    "computerId" : 1,
+    "bufferId" : "buf_alpha",
+    "produceConsumeInterval" : 3,
+    "elementsRequired" : 5
+  }, {
+    "name" : "IOStreamer",
+    "instructions" : 120,
+    "memoryRequired" : 128,
+    "priority" : 2,
+    "deadline" : 110,
+    "type" : "IO_BOUND",
+    "computerId" : 1,
+    "bufferId" : null,
+    "produceConsumeInterval" : 0,
+    "elementsRequired" : 0
+  } ],
+  "buffers" : [ {
+    "id" : "buf_alpha",
+    "capacity" : 5,
+    "hostComputerId" : 0
+  }, {
+    "id" : "buf_beta",
+    "capacity" : 10,
+    "hostComputerId" : 1
+  } ]
+}

@@ -35,3 +35,4 @@ Thumbs.db
 
 # Test reports
 surefire-reports/
+/JavaApplication17/nbproject/private/
