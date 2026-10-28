@@ -2,8 +2,11 @@ package avilaos.gui;
 
 import avilaos.kernel.Kernel;
 import avilaos.kernel.sync.Buffer;
+import avilaos.core.hardware.Computer;
 import avilaos.model.enumeration.ProcessType;
+import avilaos.model.enumeration.SchedulingPolicyType;
 import avilaos.model.pcb.PCB;
+import avilaos.simulation.SimulationCluster;
 import avilaos.util.datastructures.List;
 import avilaos.util.datastructures.Queue;
 
@@ -16,9 +19,11 @@ import java.awt.*;
  */
 public class ConfigPanel extends JPanel {
 
-    private final Kernel kernel;
+    private final SimulationCluster simulation;
+    private final Kernel legacyKernel;
     private DefaultTableModel processTableModel;
     private DefaultTableModel bufferTableModel;
+    private DefaultTableModel computerTableModel;
 
     private JTextField txtName;
     private JComboBox<ProcessType> cbType;
@@ -29,13 +34,36 @@ public class ConfigPanel extends JPanel {
 
     private JTextField txtBufferId;
     private JTextField txtBufferCapacity;
+    private JComboBox<Integer> cbProcessComputer;
+    private JComboBox<Integer> cbBufferHost;
+    private JComboBox<String> cbProcessBuffer;
+    private JTextField txtProduceConsumeInterval;
+    private JTextField txtElementsRequired;
+    private JTextField txtComputerId;
+    private JTextField txtComputerRam;
+    private JComboBox<SchedulingPolicyType> cbComputerPolicy;
+    private JTextField txtComputerQuantum;
+    private JTextField txtCycleDuration;
+    private JTextField txtNetworkLatency;
 
     public ConfigPanel(Kernel kernel) {
-        this.kernel = kernel;
+        this.simulation = null;
+        this.legacyKernel = kernel;
+        init();
+    }
+
+    public ConfigPanel(SimulationCluster simulation) {
+        this.simulation = simulation;
+        this.legacyKernel = null;
+        init();
+    }
+
+    private void init() {
         setLayout(new BorderLayout(10, 10));
         setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         initUI();
+        refreshComputerChoices();
     }
 
     private void initUI() {
@@ -46,6 +74,10 @@ public class ConfigPanel extends JPanel {
 
         // Sub-pestaña 2: Gestión de Buffers
         subTabs.addTab("Buffers / Sincronización", createBufferManagerPanel());
+
+        if (simulation != null) {
+            subTabs.addTab("Computadores / Global", createComputerManagerPanel());
+        }
 
         add(subTabs, BorderLayout.CENTER);
 
@@ -84,14 +116,31 @@ public class ConfigPanel extends JPanel {
         txtDeadline = new JTextField("50", 4);
         formPanel.add(txtDeadline);
 
+        cbProcessComputer = new JComboBox<>();
+        formPanel.add(new JLabel("Computador:"));
+        formPanel.add(cbProcessComputer);
+        formPanel.add(new JLabel("Buffer:"));
+        cbProcessBuffer = new JComboBox<>();
+        formPanel.add(cbProcessBuffer);
+        formPanel.add(new JLabel("Intervalo:"));
+        txtProduceConsumeInterval = new JTextField("1", 3);
+        formPanel.add(txtProduceConsumeInterval);
+        formPanel.add(new JLabel("Elementos:"));
+        txtElementsRequired = new JTextField("1", 3);
+        formPanel.add(txtElementsRequired);
+        formPanel.setPreferredSize(new Dimension(1150, 70));
+
         JButton btnAdd = new JButton("Agregar Proceso");
         btnAdd.addActionListener(e -> addProcess());
         formPanel.add(btnAdd);
 
-        panel.add(formPanel, BorderLayout.NORTH);
+        JScrollPane formScroll = new JScrollPane(formPanel);
+        formScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        formScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
+        panel.add(formScroll, BorderLayout.NORTH);
 
         // Tabla de Procesos
-        String[] columns = {"ID", "Nombre", "Tipo", "Prioridad", "Memoria (MB)", "Instrucciones", "Deadline"};
+        String[] columns = {"ID", "Nombre", "Computador", "Tipo", "Prioridad", "Memoria (MB)", "Instrucciones", "Deadline"};
         processTableModel = new DefaultTableModel(columns, 0);
         JTable table = new JTable(processTableModel);
         panel.add(new JScrollPane(table), BorderLayout.CENTER);
@@ -114,6 +163,10 @@ public class ConfigPanel extends JPanel {
         txtBufferCapacity = new JTextField("10", 5);
         formPanel.add(txtBufferCapacity);
 
+        cbBufferHost = new JComboBox<>();
+        formPanel.add(new JLabel("Host:"));
+        formPanel.add(cbBufferHost);
+
         JButton btnAdd = new JButton("Crear Buffer");
         btnAdd.addActionListener(e -> addBuffer());
         formPanel.add(btnAdd);
@@ -129,6 +182,113 @@ public class ConfigPanel extends JPanel {
         return panel;
     }
 
+    private JPanel createComputerManagerPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        JPanel globalPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        globalPanel.setBorder(BorderFactory.createTitledBorder("Configuración global"));
+        txtCycleDuration = new JTextField(String.valueOf(simulation.getCycleDurationMs()), 6);
+        txtNetworkLatency = new JTextField(String.valueOf(simulation.getNetworkLatencyCycles()), 6);
+        globalPanel.add(new JLabel("Duración del ciclo (ms):"));
+        globalPanel.add(txtCycleDuration);
+        globalPanel.add(new JLabel("Latencia de red (ciclos):"));
+        globalPanel.add(txtNetworkLatency);
+        JButton applyGlobal = new JButton("Aplicar");
+        applyGlobal.addActionListener(e -> applyGlobalSettings());
+        globalPanel.add(applyGlobal);
+
+        JPanel form = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        form.setBorder(BorderFactory.createTitledBorder("Agregar computador"));
+        txtComputerId = new JTextField("1", 4);
+        txtComputerRam = new JTextField("1024", 6);
+        cbComputerPolicy = new JComboBox<>(SchedulingPolicyType.values());
+        txtComputerQuantum = new JTextField("2", 4);
+        form.add(new JLabel("ID:"));
+        form.add(txtComputerId);
+        form.add(new JLabel("RAM (MB):"));
+        form.add(txtComputerRam);
+        form.add(new JLabel("Política:"));
+        form.add(cbComputerPolicy);
+        form.add(new JLabel("Quantum:"));
+        form.add(txtComputerQuantum);
+        JButton addComputer = new JButton("Agregar computador");
+        addComputer.addActionListener(e -> addComputer());
+        form.add(addComputer);
+
+        JPanel top = new JPanel(new GridLayout(2, 1));
+        top.add(globalPanel);
+        top.add(form);
+        panel.add(top, BorderLayout.NORTH);
+
+        computerTableModel = new DefaultTableModel(
+                new String[]{"ID", "RAM (MB)", "Política", "Quantum", "Ciclos", "CPU (%)", "Throughput"}, 0);
+        panel.add(new JScrollPane(new JTable(computerTableModel)), BorderLayout.CENTER);
+        refreshComputerChoices();
+        return panel;
+    }
+
+    private void applyGlobalSettings() {
+        try {
+            int duration = Integer.parseInt(txtCycleDuration.getText().trim());
+            int latency = Integer.parseInt(txtNetworkLatency.getText().trim());
+            if (duration <= 0 || latency < 0) {
+                throw new IllegalArgumentException("La duración debe ser positiva y la latencia no negativa.");
+            }
+            simulation.setCycleDurationMs(duration);
+            simulation.setNetworkLatencyCycles(latency);
+            refreshTables();
+            JOptionPane.showMessageDialog(this, "Configuración global aplicada.", "Éxito",
+                    JOptionPane.INFORMATION_MESSAGE);
+        } catch (RuntimeException ex) {
+            JOptionPane.showMessageDialog(this, "Configuración global inválida: " + ex.getMessage(),
+                    "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void addComputer() {
+        try {
+            int id = Integer.parseInt(txtComputerId.getText().trim());
+            long ram = Long.parseLong(txtComputerRam.getText().trim());
+            int quantum = Integer.parseInt(txtComputerQuantum.getText().trim());
+            SchedulingPolicyType policy = (SchedulingPolicyType) cbComputerPolicy.getSelectedItem();
+            simulation.addComputer(id, ram, policy, quantum);
+            refreshTables();
+            refreshComputerChoices();
+        } catch (RuntimeException ex) {
+            JOptionPane.showMessageDialog(this, "No se pudo agregar el computador: " + ex.getMessage(),
+                    "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void refreshComputerChoices() {
+        if (simulation == null || cbProcessComputer == null || cbBufferHost == null) return;
+        Integer selectedProcess = (Integer) cbProcessComputer.getSelectedItem();
+        Integer selectedHost = (Integer) cbBufferHost.getSelectedItem();
+        cbProcessComputer.removeAllItems();
+        cbBufferHost.removeAllItems();
+        if (simulation != null) {
+            for (int i = 0; i < simulation.getComputers().size(); i++) {
+                int id = simulation.getComputers().get(i).getId();
+                cbProcessComputer.addItem(id);
+                cbBufferHost.addItem(id);
+            }
+        } else if (legacyKernel.getComputer() != null) {
+            cbProcessComputer.addItem(legacyKernel.getComputer().getId());
+            cbBufferHost.addItem(legacyKernel.getComputer().getId());
+        }
+        if (selectedProcess != null) cbProcessComputer.setSelectedItem(selectedProcess);
+        if (selectedHost != null) cbBufferHost.setSelectedItem(selectedHost);
+
+        if (cbProcessBuffer != null) {
+            String selectedBuffer = (String) cbProcessBuffer.getSelectedItem();
+            cbProcessBuffer.removeAllItems();
+            List<Buffer> availableBuffers = getSyncManager().getAllBuffers();
+            for (int i = 0; i < availableBuffers.size(); i++) {
+                cbProcessBuffer.addItem(availableBuffers.get(i).getId());
+            }
+            if (selectedBuffer != null) cbProcessBuffer.setSelectedItem(selectedBuffer);
+        }
+    }
+
     private void addProcess() {
         try {
             String name = txtName.getText().trim();
@@ -140,13 +300,29 @@ public class ConfigPanel extends JPanel {
             long inst = Long.parseLong(txtInstructions.getText().trim());
             long deadline = Long.parseLong(txtDeadline.getText().trim());
 
-            int compId = (kernel.getComputer() != null) ? kernel.getComputer().getId() : 0;
-            PCB pcb = new PCB(name, compId, selectedType, priority, memory, deadline, inst);
+            int compId = simulation != null
+                    ? (Integer) cbProcessComputer.getSelectedItem()
+                    : (legacyKernel.getComputer() != null ? legacyKernel.getComputer().getId() : 0);
+            String bufferId = null;
+            int interval = 0;
+            int elements = 0;
+            if (selectedType == ProcessType.PRODUCER || selectedType == ProcessType.CONSUMER) {
+                bufferId = (String) cbProcessBuffer.getSelectedItem();
+                interval = Integer.parseInt(txtProduceConsumeInterval.getText().trim());
+                elements = Integer.parseInt(txtElementsRequired.getText().trim());
+                if (bufferId == null) throw new IllegalArgumentException("Seleccione o cree un buffer.");
+                if (interval <= 0 || elements <= 0 || getSyncManager().getBuffer(bufferId) == null) {
+                    throw new IllegalArgumentException("El buffer debe existir y los valores deben ser positivos.");
+                }
+            }
+            PCB pcb = new PCB(name, compId, selectedType, priority, memory, deadline, inst,
+                    bufferId, interval, elements);
 
-            kernel.submitProcess(pcb);
+            if (simulation != null) simulation.submitProcess(pcb);
+            else legacyKernel.submitProcess(pcb);
 
             processTableModel.addRow(new Object[]{
-                    pcb.getId(), pcb.getName(), selectedType, priority, memory, inst, deadline
+                    pcb.getId(), pcb.getName(), compId, selectedType, priority, memory, inst, deadline
             });
 
             JOptionPane.showMessageDialog(this, "Proceso agregado exitosamente.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
@@ -159,11 +335,22 @@ public class ConfigPanel extends JPanel {
         try {
             String bufId = txtBufferId.getText().trim();
             int capacity = Integer.parseInt(txtBufferCapacity.getText().trim());
-            int hostId = (kernel.getComputer() != null) ? kernel.getComputer().getId() : 0;
+            int hostId = simulation != null
+                    ? (Integer) cbBufferHost.getSelectedItem()
+                    : (legacyKernel.getComputer() != null ? legacyKernel.getComputer().getId() : 0);
 
-            if (kernel.getSyncManager() != null) {
-                kernel.getSyncManager().createBuffer(bufId, capacity, hostId);
+            if (simulation != null) {
+                simulation.createBuffer(bufId, capacity, hostId);
                 bufferTableModel.addRow(new Object[]{bufId, hostId, capacity});
+                refreshComputerChoices();
+                JOptionPane.showMessageDialog(this, "Buffer creado exitosamente.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
+            } else if (legacyKernel.getSyncManager() != null) {
+                if (legacyKernel.getSyncManager().getBuffer(bufId) != null) {
+                    throw new IllegalArgumentException("Ya existe el buffer " + bufId + ".");
+                }
+                legacyKernel.getSyncManager().createBuffer(bufId, capacity, hostId);
+                bufferTableModel.addRow(new Object[]{bufId, hostId, capacity});
+                refreshComputerChoices();
                 JOptionPane.showMessageDialog(this, "Buffer creado exitosamente.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
             }
         } catch (Exception ex) {
@@ -175,12 +362,12 @@ public class ConfigPanel extends JPanel {
      * Sincroniza las tablas de Vista 1 con el estado actual del Kernel.
      */
     public void refreshTables() {
-        if (kernel == null) return;
+        if (simulation == null && legacyKernel == null) return;
 
         // Refrescar Buffers
         bufferTableModel.setRowCount(0);
-        if (kernel.getSyncManager() != null && kernel.getSyncManager().getAllBuffers() != null) {
-            List<Buffer> buffers = kernel.getSyncManager().getAllBuffers();
+        if (getSyncManager() != null && getSyncManager().getAllBuffers() != null) {
+            List<Buffer> buffers = getSyncManager().getAllBuffers();
             for (int i = 0; i < buffers.size(); i++) {
                 Buffer b = buffers.get(i);
                 bufferTableModel.addRow(new Object[]{b.getId(), b.getHostComputerId(), b.getCapacity()});
@@ -189,9 +376,49 @@ public class ConfigPanel extends JPanel {
 
         // Refrescar Procesos
         processTableModel.setRowCount(0);
+        if (simulation != null) {
+            for (int i = 0; i < simulation.getComputers().size(); i++) {
+                refreshKernelProcesses(simulation.getComputers().get(i).getKernel());
+            }
+            refreshComputerTable();
+        } else {
+            refreshKernelProcesses(legacyKernel);
+        }
+    }
+
+    private void refreshKernelProcesses(Kernel kernel) {
         refreshProcessesFromQueue(kernel.getNewQueue());
         refreshProcessesFromQueue(kernel.getReadyQueue());
         refreshProcessesFromQueue(kernel.getTerminatedQueue());
+        refreshProcessesFromQueue(kernel.getAllBlockedQueues());
+        PCB running = kernel.getComputer().getCpu().getCurrentProcess();
+        if (running != null) {
+            processTableModel.addRow(new Object[]{running.getId(), running.getName(),
+                    running.getComputerId(), running.getType(), running.getPriority(),
+                    running.getMemoryRequired(), running.getRemainingTime(), running.getDeadline()});
+        }
+    }
+
+    private void refreshProcessesFromQueue(List<Queue<PCB>> queues) {
+        for (int i = 0; i < queues.size(); i++) refreshProcessesFromQueue(queues.get(i));
+    }
+
+    private void refreshComputerTable() {
+        computerTableModel.setRowCount(0);
+        for (int i = 0; i < simulation.getComputers().size(); i++) {
+            Computer computer = simulation.getComputers().get(i);
+            Kernel kernel = computer.getKernel();
+            computerTableModel.addRow(new Object[]{
+                    computer.getId(), computer.getRam().getTotalSize() / (1024L * 1024L),
+                    kernel.getScheduler().getPolicy().getType(), kernel.getQuantum(),
+                    kernel.getCyclesExecuted(), String.format("%.2f", kernel.getCpuUtilization()),
+                    String.format("%.4f", kernel.getThroughput())
+            });
+        }
+    }
+
+    private avilaos.kernel.sync.SyncManager getSyncManager() {
+        return simulation != null ? simulation.getSyncManager() : legacyKernel.getSyncManager();
     }
 
     private void refreshProcessesFromQueue(Queue<PCB> queue) {
@@ -201,7 +428,7 @@ public class ConfigPanel extends JPanel {
             PCB p = queue.dequeue();
             if (p != null) {
                 processTableModel.addRow(new Object[]{
-                        p.getId(), p.getName(), p.getType(), p.getPriority(),
+                        p.getId(), p.getName(), p.getComputerId(), p.getType(), p.getPriority(),
                         p.getMemoryRequired(), p.getRemainingTime(), p.getDeadline()
                 });
                 queue.enqueue(p);

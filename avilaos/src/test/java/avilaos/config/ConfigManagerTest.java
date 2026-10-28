@@ -51,7 +51,7 @@ public class ConfigManagerTest {
             assertTrue(configFile.exists(), "El archivo de configuración JSON debe crearse.");
 
             // 3. Crear nuevo Kernel y cargar la configuración guardada
-            Computer newComputer = new Computer(1, 2048L, SchedulingPolicyType.FCFS, 2);
+            Computer newComputer = new Computer(0, 2048L, SchedulingPolicyType.FCFS, 2);
             Kernel newKernel = new Kernel(newComputer, SchedulingPolicyType.FCFS, 2);
 
             ConfigManager.loadConfigFromJson(TEST_FILE_PATH, newKernel);

@@ -41,9 +41,9 @@ public class CPU {
     }
 
     public void executeCycle() {
+        instructionsExecutedThisCycle = 0;
         if (currentProcess == null) return;
 
-        instructionsExecutedThisCycle = 0;
         mode = currentProcess.getMode();
 
         boolean continueExecution = currentProcess.getRemainingTime() > 0 && !currentProcess.isFinished();
