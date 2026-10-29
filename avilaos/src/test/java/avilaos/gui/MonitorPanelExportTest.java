@@ -38,7 +38,9 @@ class MonitorPanelExportTest {
         createMonitor("PNG worker").exportToPng(file);
 
         assertTrue(file.isFile());
-        assertNotNull(ImageIO.read(file));
+        var image = ImageIO.read(file);
+        assertNotNull(image);
+        assertTrue(image.getHeight() > 800);
     }
 
     @Test
@@ -60,6 +62,7 @@ class MonitorPanelExportTest {
         assertTrue(html.contains("<!doctype html>"));
         assertTrue(html.contains("Worker &lt;A&amp;B&gt;"));
         assertTrue(html.contains("<caption>Cola READY</caption>"));
+        assertTrue(html.contains("<h2>Datos de los gráficos</h2>"));
     }
 
     @Test
@@ -89,6 +92,10 @@ class MonitorPanelExportTest {
             String csv = Files.readString(file.toPath(), StandardCharsets.UTF_8);
             assertTrue(csv.contains("\"Métricas globales\",\"0\",\"Utilización CPU (%)\",\"100.0\""));
             assertTrue(csv.contains("\"Métricas globales\",\"0\",\"Throughput (procesos/ciclo)\",\"2.0\""));
+            assertTrue(csv.contains("\"Gráfico CPU\",\"1\",\"Computador 0\",\"100.0\""));
+            assertTrue(csv.contains("\"Gráfico CPU\",\"2\",\"Computador 1\",\"100.0\""));
+            assertTrue(csv.contains("\"Gráfico procesos\""));
+            assertTrue(csv.contains("\"Gráfico procesos\",\"1\",\"Terminado\",\"1.0\""));
         } finally {
             simulation.shutdown();
         }

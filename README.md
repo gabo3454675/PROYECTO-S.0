@@ -38,7 +38,7 @@ docs/                    plan y arquitectura
 
 - [x] Fundación, hardware, kernel, planificación y sincronización.
 - [x] Configuración global y por computador; simulación distribuida con buffers compartidos.
-- [x] Monitor por computador y métricas globales de CPU y throughput; persistencia JSON validada.
+- [x] Monitor con comparación gráfica de CPU por computador y distribución de procesos por estado; métricas globales y persistencia JSON validada.
 - [x] Exportación del dashboard a PNG, CSV y HTML.
 
 Desde **Archivo → Exportar Monitor** se puede guardar la vista actual como PNG,

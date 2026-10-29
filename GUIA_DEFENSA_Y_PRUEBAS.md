@@ -33,7 +33,9 @@ configuración hasta el resultado:
 7. Los procesos productores y consumidores usan un buffer. Los semáforos
    coordinan el acceso y evitan que dos operaciones entren a la sección crítica
    al mismo tiempo.
-8. El monitor presenta CPU, memoria, colas, buffers y métricas. La configuración
+8. El monitor presenta CPU, memoria, colas, buffers y métricas. Incluye una
+   comparación de utilización acumulada de CPU por computador y un gráfico de
+   procesos por estado para el computador seleccionado. La configuración
    también se puede guardar en JSON y el monitor se puede exportar.
 
 Al pulsar **Avanzar 1 Ciclo**, el reloj de simulación aumenta una unidad y cada
@@ -161,7 +163,7 @@ la ejecución distribuida, la latencia y la sincronización.
 
 ### Ejecución paso a paso
 
-1. Ve a **Vista 2: Monitor en Tiempo Real**.
+1. Ve a la pestaña **Monitor**.
 2. Selecciona el computador `0` en el control **Computador**. Observa proceso en
    CPU, memoria y colas de ese nodo.
 3. Pulsa **Avanzar 1 Ciclo** varias veces. El número de ciclo global debe
@@ -173,8 +175,11 @@ la ejecución distribuida, la latencia y la sincronización.
    espera. Los productores y consumidores también pueden bloquearse si el
    buffer está lleno o vacío.
 6. En **Computadores / Global**, compara ciclos ejecutados, utilización de CPU
-   y throughput. Al principio el throughput puede ser `0`; aumenta cuando se
-   completan procesos.
+   y throughput. En **Monitor**, consulta el gráfico de utilización acumulada
+   de CPU para comparar los computadores y el gráfico circular para ver los
+   estados del nodo seleccionado. Al principio el throughput puede ser `0`;
+   aumenta cuando se completan procesos. Los gráficos muestran el estado y las
+   métricas acumuladas actuales; no representan una serie histórica por ciclo.
 7. Usa **Archivo → Exportar Monitor** y prueba CSV o HTML. Abre el archivo para
    comprobar que incluye el ciclo, colas y métricas.
 8. Usa **Archivo → Guardar Configuración (JSON)...**. Carga ese archivo y

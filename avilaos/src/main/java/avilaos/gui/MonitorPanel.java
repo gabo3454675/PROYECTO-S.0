@@ -12,6 +12,15 @@ import avilaos.simulation.SimulationCluster;
 import avilaos.util.datastructures.List;
 import avilaos.util.datastructures.Queue;
 
+import org.jfree.chart.ChartFactory;
+import org.jfree.chart.ChartPanel;
+import org.jfree.chart.JFreeChart;
+import org.jfree.chart.plot.PiePlot;
+import org.jfree.chart.plot.PlotOrientation;
+import org.jfree.chart.renderer.category.BarRenderer;
+import org.jfree.data.category.DefaultCategoryDataset;
+import org.jfree.data.general.DefaultPieDataset;
+
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableModel;
@@ -32,11 +41,14 @@ public class MonitorPanel extends JPanel {
 
     // Componentes del Control Superior
     private JLabel lblCurrentCycle;
+    private JPanel headerPanel;
+    private JPanel dashboardContent;
     private JComboBox<SchedulingPolicyType> cbPolicy;
     private JButton btnAdvanceCycle;
     private JComboBox<Integer> cbComputer;
     private JLabel lblCpuUtilization;
     private JLabel lblThroughput;
+    private JLabel lblRunningProcess;
     private boolean updatingControls;
 
     // Panel de CPU / Estado
@@ -59,6 +71,11 @@ public class MonitorPanel extends JPanel {
     // Log de Eventos
     private JTextArea txtLog;
 
+    private final DefaultCategoryDataset cpuDataset = new DefaultCategoryDataset();
+    private final DefaultPieDataset<String> processStateDataset = new DefaultPieDataset<>();
+    private JFreeChart cpuChart;
+    private JFreeChart processStateChart;
+
     public MonitorPanel(Kernel kernel) {
         this.simulation = null;
         this.kernel = kernel;
@@ -75,8 +92,8 @@ public class MonitorPanel extends JPanel {
     }
 
     private void initialize() {
-        setLayout(new BorderLayout(10, 10));
-        setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        setLayout(new BorderLayout(0, 0));
+        setBorder(BorderFactory.createEmptyBorder(16, 20, 20, 20));
 
         initComponents();
         applyDarkDashboardStyle();
@@ -84,75 +101,106 @@ public class MonitorPanel extends JPanel {
     }
 
     private void initComponents() {
-        // --- PANEL SUPERIOR: Control de Ciclos y Políticas ---
-        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 5));
-        topPanel.setBorder(BorderFactory.createTitledBorder("Control de Simulación"));
+        headerPanel = new JPanel(new BorderLayout(16, 12));
+        headerPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 14, 0));
+        JPanel heading = new JPanel();
+        heading.setLayout(new BoxLayout(heading, BoxLayout.Y_AXIS));
+        JLabel title = new JLabel("Centro de operaciones");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 25));
+        JLabel subtitle = new JLabel("Estado de recursos y procesos de la simulación");
+        subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        heading.add(title);
+        heading.add(Box.createVerticalStrut(4));
+        heading.add(subtitle);
+        headerPanel.add(heading, BorderLayout.WEST);
 
-        lblCurrentCycle = new JLabel("Ciclo Actual: 0");
-        lblCurrentCycle.setFont(new Font("Arial", Font.BOLD, 14));
-
+        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 8));
+        topPanel.setBorder(BorderFactory.createTitledBorder("Controles"));
+        lblCurrentCycle = new JLabel("Ciclo 0");
+        lblCurrentCycle.setFont(new Font("Segoe UI", Font.BOLD, 15));
         if (simulation != null) {
             cbComputer = new JComboBox<>();
             for (Computer computer : simulation.getComputers()) cbComputer.addItem(computer.getId());
             cbComputer.setSelectedItem(kernel.getComputer().getId());
             cbComputer.addActionListener(e -> selectComputer());
-            topPanel.add(new JLabel("Computador:"));
+            topPanel.add(new JLabel("Nodo"));
             topPanel.add(cbComputer);
-            lblCpuUtilization = new JLabel("CPU global: 0.00%");
-            lblThroughput = new JLabel("Throughput global: 0.0000 procesos/ciclo");
-            topPanel.add(lblCpuUtilization);
-            topPanel.add(lblThroughput);
         }
 
         cbPolicy = new JComboBox<>(SchedulingPolicyType.values());
         cbPolicy.addActionListener(e -> changePolicy());
 
-        btnAdvanceCycle = new JButton("Avanzar 1 Ciclo");
+        btnAdvanceCycle = new JButton("Avanzar ciclo");
         btnAdvanceCycle.addActionListener(e -> advanceCycle());
 
         topPanel.add(lblCurrentCycle);
-        topPanel.add(new JLabel("Política:"));
+        topPanel.add(new JLabel("Planificador"));
         topPanel.add(cbPolicy);
         topPanel.add(btnAdvanceCycle);
+        headerPanel.add(topPanel, BorderLayout.EAST);
+        add(headerPanel, BorderLayout.NORTH);
 
-        add(topPanel, BorderLayout.NORTH);
+        dashboardContent = new JPanel();
+        dashboardContent.setLayout(new BoxLayout(dashboardContent, BoxLayout.Y_AXIS));
 
-        // --- PANEL CENTRAL: CPU, Memoria, Colas y Buffers ---
-        JPanel centerPanel = new JPanel(new BorderLayout(10, 10));
+        JPanel metricsPanel = new JPanel(new GridLayout(1, 3, 12, 0));
+        metricsPanel.add(createMetricCard("UTILIZACIÓN CPU", "0.00%", value -> lblCpuUtilization = value));
+        metricsPanel.add(createMetricCard("THROUGHPUT", "0.0000 procesos/ciclo", value -> lblThroughput = value));
+        metricsPanel.add(createMetricCard("PROCESO EN CPU", "En espera", value -> lblRunningProcess = value));
+        dashboardContent.add(metricsPanel);
+        dashboardContent.add(Box.createVerticalStrut(14));
 
-        // CPU & Memoria
-        JPanel statusPanel = new JPanel(new GridLayout(1, 2, 10, 0));
+        JPanel chartsPanel = new JPanel(new GridLayout(1, 2, 12, 0));
+        cpuChart = ChartFactory.createBarChart(
+                "Utilización acumulada por computador", "Computador", "CPU (%)",
+                cpuDataset, PlotOrientation.VERTICAL, false, true, false);
+        BarRenderer cpuRenderer = (BarRenderer) cpuChart.getCategoryPlot().getRenderer();
+        cpuRenderer.setSeriesPaint(0, new Color(72, 187, 153));
+        cpuRenderer.setDefaultItemLabelGenerator(
+                new org.jfree.chart.labels.StandardCategoryItemLabelGenerator("{2}%", java.text.NumberFormat.getNumberInstance()));
+        cpuRenderer.setDefaultItemLabelsVisible(true);
 
-        // Estado CPU
-        JPanel cpuPanel = new JPanel(new GridLayout(3, 2, 5, 5));
-        cpuPanel.setBorder(BorderFactory.createTitledBorder("CPU (Proceso en Ejecución)"));
+        processStateChart = ChartFactory.createPieChart(
+                "Procesos por estado · computador seleccionado", processStateDataset, true, true, false);
+        PiePlot<String> statePlot = (PiePlot<String>) processStateChart.getPlot();
+        statePlot.setSectionPaint("Nuevo", new Color(96, 165, 250));
+        statePlot.setSectionPaint("Listo", new Color(251, 191, 36));
+        statePlot.setSectionPaint("Ejecución", new Color(72, 187, 153));
+        statePlot.setSectionPaint("Bloqueado", new Color(248, 113, 113));
+        statePlot.setSectionPaint("Terminado", new Color(167, 139, 250));
+        statePlot.setLabelGenerator(new org.jfree.chart.labels.StandardPieSectionLabelGenerator("{0}: {1} ({2})"));
+        chartsPanel.add(createChartCard(cpuChart));
+        chartsPanel.add(createChartCard(processStateChart));
+        dashboardContent.add(chartsPanel);
+        dashboardContent.add(Box.createVerticalStrut(14));
+
+        JPanel statusPanel = new JPanel(new GridLayout(1, 2, 12, 0));
+        JPanel cpuPanel = createCard("CPU · Proceso en ejecución");
+        cpuPanel.setLayout(new GridLayout(3, 2, 10, 8));
         lblCpuProcess = new JLabel("Proceso: Ninguno");
-        lblCpuPC = new JLabel("PC: 0");
+        lblCpuPC = new JLabel("Contador de programa: 0");
         lblCpuPriority = new JLabel("Prioridad: -");
         lblCpuDeadline = new JLabel("Deadline: -");
-        lblCpuMode = new JLabel("Modo: OS");
+        lblCpuMode = new JLabel("Modo: Sistema Operativo");
         cpuPanel.add(lblCpuProcess);
         cpuPanel.add(lblCpuPC);
         cpuPanel.add(lblCpuPriority);
         cpuPanel.add(lblCpuDeadline);
         cpuPanel.add(lblCpuMode);
 
-        // Estado Memoria
-        JPanel memPanel = new JPanel(new BorderLayout(5, 5));
-        memPanel.setBorder(BorderFactory.createTitledBorder("Ocupación de Memoria Principal (RAM)"));
+        JPanel memPanel = createCard("Memoria principal · RAM");
+        memPanel.setLayout(new BorderLayout(8, 8));
         barMemory = new JProgressBar(0, 100);
         barMemory.setStringPainted(true);
         barMemory.setValue(0);
         barMemory.setString("0 MB / 1024 MB (0%)");
         memPanel.add(barMemory, BorderLayout.CENTER);
-
         statusPanel.add(cpuPanel);
         statusPanel.add(memPanel);
+        dashboardContent.add(statusPanel);
+        dashboardContent.add(Box.createVerticalStrut(14));
 
-        centerPanel.add(statusPanel, BorderLayout.NORTH);
-
-        // Tablas de Colas (NEW, READY, BLOCKED, TERMINATED)
-        JPanel queuesPanel = new JPanel(new GridLayout(2, 2, 10, 10));
+        JPanel queuesPanel = new JPanel(new GridLayout(2, 2, 12, 12));
 
         newQueueModel = new DefaultTableModel(new String[]{"ID", "Nombre", "Prioridad", "Memoria (MB)"}, 0);
         readyQueueModel = new DefaultTableModel(new String[]{"ID", "Nombre", "Prioridad", "Restante"}, 0);
@@ -163,38 +211,72 @@ public class MonitorPanel extends JPanel {
         queuesPanel.add(createTablePanel("Cola READY", readyQueueModel));
         queuesPanel.add(createTablePanel("Cola BLOCKED", blockedQueueModel));
         queuesPanel.add(createTablePanel("Cola TERMINATED", termQueueModel));
+        dashboardContent.add(createCardWithContent("Colas de procesos", queuesPanel));
+        dashboardContent.add(Box.createVerticalStrut(14));
 
-        centerPanel.add(queuesPanel, BorderLayout.CENTER);
-
-        // Tablas de Buffers
         buffersModel = new DefaultTableModel(new String[]{"ID Buffer", "Host", "Ocupación", "Capacidad", "Bloqueados"}, 0);
-        JPanel bufferContainer = createTablePanel("Estado de Buffers / Sincronización", buffersModel);
-        bufferContainer.setPreferredSize(new Dimension(200, 110));
+        dashboardContent.add(createTablePanel("Buffers y sincronización", buffersModel));
+        dashboardContent.add(Box.createVerticalStrut(14));
 
-        centerPanel.add(bufferContainer, BorderLayout.SOUTH);
-
-        add(centerPanel, BorderLayout.CENTER);
-
-        // --- PANEL INFERIOR: Log de Eventos ---
-        JPanel logPanel = new JPanel(new BorderLayout());
-        logPanel.setBorder(BorderFactory.createTitledBorder("Log de Eventos del Sistema"));
+        JPanel logPanel = createCard("Registro de eventos");
+        logPanel.setLayout(new BorderLayout());
         txtLog = new JTextArea(5, 50);
         txtLog.setEditable(false);
-        txtLog.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        logPanel.add(new JScrollPane(txtLog), BorderLayout.CENTER);
+        txtLog.setFont(new Font("Consolas", Font.PLAIN, 12));
+        JScrollPane logScroll = new JScrollPane(txtLog);
+        logScroll.setPreferredSize(new Dimension(600, 150));
+        logPanel.add(logScroll, BorderLayout.CENTER);
+        dashboardContent.add(logPanel);
 
-        add(logPanel, BorderLayout.SOUTH);
+        JScrollPane contentScroll = new JScrollPane(dashboardContent);
+        contentScroll.setBorder(BorderFactory.createEmptyBorder());
+        contentScroll.getVerticalScrollBar().setUnitIncrement(18);
+        contentScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        add(contentScroll, BorderLayout.CENTER);
     }
 
     private JPanel createTablePanel(String title, DefaultTableModel model) {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createTitledBorder(title));
+        JPanel panel = createCard(title);
+        panel.setLayout(new BorderLayout());
         JTable table = new JTable(model);
         table.setFillsViewportHeight(true);
         JScrollPane scrollPane = new JScrollPane(table);
-        scrollPane.setPreferredSize(new Dimension(150, 110));
+        scrollPane.setPreferredSize(new Dimension(150, 150));
         panel.add(scrollPane, BorderLayout.CENTER);
         return panel;
+    }
+
+    private JPanel createMetricCard(String title, String initialValue,
+                                    java.util.function.Consumer<JLabel> valueReceiver) {
+        JPanel card = createCard(title);
+        card.setLayout(new BorderLayout());
+        JLabel value = new JLabel(initialValue);
+        value.setFont(new Font("Segoe UI", Font.BOLD, 21));
+        card.add(value, BorderLayout.CENTER);
+        valueReceiver.accept(value);
+        return card;
+    }
+
+    private JPanel createCard(String title) {
+        JPanel card = new JPanel(new BorderLayout(8, 8));
+        card.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(new Color(55, 65, 80)), title));
+        return card;
+    }
+
+    private JPanel createCardWithContent(String title, JComponent content) {
+        JPanel card = createCard(title);
+        card.add(content, BorderLayout.CENTER);
+        return card;
+    }
+
+    private JPanel createChartCard(JFreeChart chart) {
+        JPanel card = createCard("");
+        card.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
+        ChartPanel chartPanel = new ChartPanel(chart);
+        chartPanel.setPreferredSize(new Dimension(420, 270));
+        card.add(chartPanel, BorderLayout.CENTER);
+        return card;
     }
 
     private void advanceCycle() {
@@ -236,7 +318,7 @@ public class MonitorPanel extends JPanel {
     public void updateMonitor() {
         if (kernel == null) return;
 
-        lblCurrentCycle.setText("Ciclo Actual: "
+        lblCurrentCycle.setText("Ciclo "
                 + (simulation == null ? kernel.getCurrentCycle() : simulation.getCurrentCycle()));
         updatingControls = true;
         if (simulation != null) {
@@ -262,16 +344,18 @@ public class MonitorPanel extends JPanel {
 
         if (currentPcb != null) {
             lblCpuProcess.setText("Proceso: " + currentPcb.getName() + " (ID: " + currentPcb.getId() + ")");
-            lblCpuPC.setText("PC: " + currentPcb.getProgramCounter());
+            lblCpuPC.setText("Contador de programa: " + currentPcb.getProgramCounter());
             lblCpuPriority.setText("Prioridad: " + currentPcb.getPriority());
             lblCpuDeadline.setText("Deadline: " + currentPcb.getDeadline());
             lblCpuMode.setText("Modo: " + (cpu.getMode() != null ? cpu.getMode() : "Usuario"));
+            lblRunningProcess.setText(currentPcb.getName());
         } else {
             lblCpuProcess.setText("Proceso: Ninguno (IDLE)");
-            lblCpuPC.setText("PC: 0");
+            lblCpuPC.setText("Contador de programa: 0");
             lblCpuPriority.setText("Prioridad: -");
             lblCpuDeadline.setText("Deadline: -");
             lblCpuMode.setText("Modo: Sistema Operativo");
+            lblRunningProcess.setText("En espera");
         }
 
         // Actualizar ocupación de memoria RAM
@@ -289,14 +373,60 @@ public class MonitorPanel extends JPanel {
         refreshQueueTable(kernel.getTerminatedQueue(), termQueueModel, false);
         refreshBlockedQueuesTable();
 
-        // Actualizar Tabla de Buffers
         refreshBuffersTable();
+        updateCharts();
     }
 
     private void updateGlobalMetrics() {
-        if (simulation == null) return;
-        lblCpuUtilization.setText(String.format("CPU global: %.2f%%", getGlobalCpuUtilization()));
-        lblThroughput.setText(String.format("Throughput global: %.4f procesos/ciclo", getGlobalThroughput()));
+        double cpuUtilization = simulation == null
+                ? kernel.getCpuUtilization() : getGlobalCpuUtilization();
+        double throughput = simulation == null
+                ? kernel.getThroughput() : getGlobalThroughput();
+        lblCpuUtilization.setText(String.format("%.2f%%", cpuUtilization));
+        lblThroughput.setText(String.format("%.4f procesos/ciclo", throughput));
+    }
+
+    private void updateCharts() {
+        cpuDataset.clear();
+        if (simulation == null) {
+            addCpuDatasetValue(kernel);
+        } else {
+            for (Computer computer : simulation.getComputers()) {
+                addCpuDatasetValue(computer.getKernel());
+            }
+        }
+
+        processStateDataset.clear();
+        setProcessStateValue("Nuevo", countQueue(kernel.getNewQueue()));
+        setProcessStateValue("Listo", countQueue(kernel.getReadyQueue()));
+        setProcessStateValue("Ejecución", kernel.getComputer().getCpu().getCurrentProcess() == null ? 0 : 1);
+        setProcessStateValue("Bloqueado", countBlockedProcesses());
+        setProcessStateValue("Terminado", countQueue(kernel.getTerminatedQueue()));
+    }
+
+    private void addCpuDatasetValue(Kernel computerKernel) {
+        cpuDataset.addValue(computerKernel.getCpuUtilization(), "Uso de CPU",
+                "Computador " + computerKernel.getComputer().getId());
+    }
+
+    private void setProcessStateValue(String state, int count) {
+        if (count > 0) {
+            processStateDataset.setValue(state, count);
+        }
+    }
+
+    private int countBlockedProcesses() {
+        int count = 0;
+        List<Queue<PCB>> blockedQueues = kernel.getAllBlockedQueues();
+        if (blockedQueues == null) return count;
+        for (int i = 0; i < blockedQueues.size(); i++) {
+            count += countQueue(blockedQueues.get(i));
+        }
+        return count;
+    }
+
+    private int countQueue(Queue<PCB> queue) {
+        return queue == null ? 0 : queue.size();
     }
 
     private double getGlobalCpuUtilization() {
@@ -391,7 +521,10 @@ public class MonitorPanel extends JPanel {
 
         Dimension previousSize = getSize();
         int width = Math.max(getWidth(), 1200);
-        int height = Math.max(getHeight(), 800);
+        int contentHeight = headerPanel.getPreferredSize().height
+                + dashboardContent.getPreferredSize().height
+                + getInsets().top + getInsets().bottom;
+        int height = Math.max(Math.max(getHeight(), 800), contentHeight);
         setSize(width, height);
         layoutTree(this);
 
@@ -426,6 +559,7 @@ public class MonitorPanel extends JPanel {
             appendCsvRow(csv, "Métricas globales", "0", "Utilización CPU (%)", getGlobalCpuUtilization());
             appendCsvRow(csv, "Métricas globales", "0", "Throughput (procesos/ciclo)", getGlobalThroughput());
         }
+        appendChartDataToCsv(csv);
         appendCsvRow(csv, "CPU", "0", "Proceso en ejecución",
                 kernel.getComputer().getCpu().getCurrentProcess() == null
                         ? "Ninguno"
@@ -474,6 +608,7 @@ public class MonitorPanel extends JPanel {
                 .append(" MB / ")
                 .append(kernel.getComputer().getRam().getTotalSize() / BYTES_PER_MB)
                 .append(" MB</p>");
+        appendChartDataToHtml(html);
         appendHtmlTable(html, "Cola NEW", newQueueModel);
         appendHtmlTable(html, "Cola READY", readyQueueModel);
         appendHtmlTable(html, "Cola BLOCKED", blockedQueueModel);
@@ -482,6 +617,37 @@ public class MonitorPanel extends JPanel {
         html.append("<h2>Eventos</h2><pre>").append(htmlEscape(txtLog.getText()))
                 .append("</pre></body></html>");
         Files.writeString(file.toPath(), html.toString(), StandardCharsets.UTF_8);
+    }
+
+    private void appendChartDataToCsv(StringBuilder csv) {
+        for (int column = 0; column < cpuDataset.getColumnCount(); column++) {
+            appendCsvRow(csv, "Gráfico CPU", column + 1, cpuDataset.getColumnKey(column),
+                    cpuDataset.getValue(0, column));
+        }
+        for (int item = 0; item < processStateDataset.getItemCount(); item++) {
+            appendCsvRow(csv, "Gráfico procesos", item + 1, processStateDataset.getKey(item),
+                    processStateDataset.getValue(item));
+        }
+    }
+
+    private void appendChartDataToHtml(StringBuilder html) {
+        html.append("<h2>Datos de los gráficos</h2><table><caption>")
+                .append("Utilización acumulada de CPU por computador")
+                .append("</caption><thead><tr><th>Computador</th><th>CPU (%)</th></tr></thead><tbody>");
+        for (int column = 0; column < cpuDataset.getColumnCount(); column++) {
+            html.append("<tr><td>").append(htmlEscape(cpuDataset.getColumnKey(column)))
+                    .append("</td><td>").append(htmlEscape(cpuDataset.getValue(0, column)))
+                    .append("</td></tr>");
+        }
+        html.append("</tbody></table><table><caption>")
+                .append("Procesos por estado · computador seleccionado")
+                .append("</caption><thead><tr><th>Estado</th><th>Procesos</th></tr></thead><tbody>");
+        for (int item = 0; item < processStateDataset.getItemCount(); item++) {
+            html.append("<tr><td>").append(htmlEscape(processStateDataset.getKey(item)))
+                    .append("</td><td>").append(htmlEscape(processStateDataset.getValue(item)))
+                    .append("</td></tr>");
+        }
+        html.append("</tbody></table>");
     }
 
     private static void requireFile(File file) {
@@ -546,34 +712,63 @@ public class MonitorPanel extends JPanel {
     }
 
     private void applyDarkDashboardStyle() {
-        Color bgColor = new Color(24, 28, 36);         // Fondo principal oscuro (#181C24)
-        Color cardColor = new Color(34, 40, 52);       // Fondo tarjetas (#222834)
-        Color textColor = new Color(220, 225, 230);    // Texto claro
-        Color accentColor = new Color(46, 204, 113);   // Verde lima
+        Color bgColor = new Color(24, 28, 36);
+        Color cardColor = new Color(34, 40, 52);
+        Color textColor = new Color(220, 225, 230);
+        Color accentColor = new Color(72, 187, 153);
 
         Font mainFont = new Font("Segoe UI", Font.PLAIN, 12);
         Font titleFont = new Font("Segoe UI", Font.BOLD, 13);
 
         setBackground(bgColor);
 
-        // Barra de memoria
         barMemory.setForeground(accentColor);
         barMemory.setBackground(new Color(50, 60, 75));
         barMemory.setFont(new Font("Segoe UI", Font.BOLD, 11));
 
-        // Área de Log
         txtLog.setBackground(new Color(18, 22, 28));
         txtLog.setForeground(new Color(160, 220, 160));
         txtLog.setCaretColor(Color.WHITE);
 
-        // Estilizar árbol de componentes
+        styleChart(cpuChart, cardColor, textColor);
+        styleChart(processStateChart, cardColor, textColor);
         styleComponentsDark(this, bgColor, cardColor, textColor, mainFont, titleFont);
     }
 
+    private void styleChart(JFreeChart chart, Color background, Color foreground) {
+        chart.setBackgroundPaint(background);
+        if (chart.getTitle() != null) {
+            chart.getTitle().setPaint(foreground);
+        }
+        if (chart.getLegend() != null) {
+            chart.getLegend().setBackgroundPaint(background);
+            chart.getLegend().setItemPaint(foreground);
+        }
+        chart.getPlot().setBackgroundPaint(background);
+        chart.getPlot().setOutlinePaint(new Color(55, 65, 80));
+        if (chart.getPlot() instanceof org.jfree.chart.plot.CategoryPlot plot) {
+            plot.setRangeGridlinePaint(new Color(55, 65, 80));
+            plot.getDomainAxis().setLabelPaint(foreground);
+            plot.getDomainAxis().setTickLabelPaint(foreground);
+            plot.getRangeAxis().setLabelPaint(foreground);
+            plot.getRangeAxis().setTickLabelPaint(foreground);
+            ((org.jfree.chart.axis.NumberAxis) plot.getRangeAxis()).setRange(0, 100);
+        } else if (chart.getPlot() instanceof PiePlot<?> plot) {
+            plot.setLabelPaint(foreground);
+            plot.setLabelBackgroundPaint(background);
+            plot.setLabelOutlinePaint(new Color(55, 65, 80));
+            plot.setNoDataMessage("No hay procesos en este computador");
+            plot.setNoDataMessagePaint(foreground);
+        }
+    }
+
     private void styleComponentsDark(Component comp, Color bg, Color cardBg, Color text, Font font, Font titleFont) {
-        if (comp instanceof JPanel) {
+        if (comp instanceof ChartPanel chartPanel) {
+            chartPanel.setBackground(cardBg);
+        } else if (comp instanceof JPanel) {
             JPanel p = (JPanel) comp;
-            p.setBackground(cardBg);
+            p.setBackground(p == this || !(p.getBorder() instanceof javax.swing.border.TitledBorder)
+                    ? bg : cardBg);
             if (p.getBorder() instanceof javax.swing.border.TitledBorder) {
                 javax.swing.border.TitledBorder border = (javax.swing.border.TitledBorder) p.getBorder();
                 border.setTitleFont(titleFont);
@@ -611,7 +806,9 @@ public class MonitorPanel extends JPanel {
             }
         } else if (comp instanceof JLabel) {
             comp.setForeground(text);
-            comp.setFont(font);
+            if (comp.getFont() == null || comp.getFont().getSize() <= font.getSize()) {
+                comp.setFont(font);
+            }
         } else if (comp instanceof JComboBox || comp instanceof JButton) {
             comp.setFont(font);
         }

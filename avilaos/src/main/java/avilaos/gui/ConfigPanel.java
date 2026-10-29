@@ -88,56 +88,38 @@ public class ConfigPanel extends JPanel {
     private JPanel createProcessManagerPanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
 
-        // Formulario Superior
-        JPanel formPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        JPanel formPanel = new JPanel(new BorderLayout(10, 10));
         formPanel.setBorder(BorderFactory.createTitledBorder("Agregar Nuevo Proceso"));
+        JPanel fieldsPanel = new JPanel(new GridLayout(0, 5, 12, 8));
 
-        formPanel.add(new JLabel("Nombre:"));
         txtName = new JTextField("Proc_1", 7);
-        formPanel.add(txtName);
-
-        formPanel.add(new JLabel("Tipo:"));
         cbType = new JComboBox<>(ProcessType.values());
-        formPanel.add(cbType);
-
-        formPanel.add(new JLabel("Prioridad:"));
         txtPriority = new JTextField("1", 3);
-        formPanel.add(txtPriority);
-
-        formPanel.add(new JLabel("Memoria (MB):"));
         txtMemory = new JTextField("64", 4);
-        formPanel.add(txtMemory);
-
-        formPanel.add(new JLabel("Instrucciones:"));
         txtInstructions = new JTextField("100", 5);
-        formPanel.add(txtInstructions);
-
-        formPanel.add(new JLabel("Deadline:"));
         txtDeadline = new JTextField("50", 4);
-        formPanel.add(txtDeadline);
-
         cbProcessComputer = new JComboBox<>();
-        formPanel.add(new JLabel("Computador:"));
-        formPanel.add(cbProcessComputer);
-        formPanel.add(new JLabel("Buffer:"));
         cbProcessBuffer = new JComboBox<>();
-        formPanel.add(cbProcessBuffer);
-        formPanel.add(new JLabel("Intervalo:"));
         txtProduceConsumeInterval = new JTextField("1", 3);
-        formPanel.add(txtProduceConsumeInterval);
-        formPanel.add(new JLabel("Elementos:"));
         txtElementsRequired = new JTextField("1", 3);
-        formPanel.add(txtElementsRequired);
-        formPanel.setPreferredSize(new Dimension(1150, 70));
+        fieldsPanel.add(createLabeledField("Nombre", txtName));
+        fieldsPanel.add(createLabeledField("Tipo de proceso", cbType));
+        fieldsPanel.add(createLabeledField("Prioridad", txtPriority));
+        fieldsPanel.add(createLabeledField("Memoria (MB)", txtMemory));
+        fieldsPanel.add(createLabeledField("Instrucciones", txtInstructions));
+        fieldsPanel.add(createLabeledField("Deadline", txtDeadline));
+        fieldsPanel.add(createLabeledField("Computador", cbProcessComputer));
+        fieldsPanel.add(createLabeledField("Buffer", cbProcessBuffer));
+        fieldsPanel.add(createLabeledField("Intervalo", txtProduceConsumeInterval));
+        fieldsPanel.add(createLabeledField("Elementos", txtElementsRequired));
+        formPanel.add(fieldsPanel, BorderLayout.CENTER);
 
         JButton btnAdd = new JButton("Agregar Proceso");
         btnAdd.addActionListener(e -> addProcess());
-        formPanel.add(btnAdd);
-
-        JScrollPane formScroll = new JScrollPane(formPanel);
-        formScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-        formScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
-        panel.add(formScroll, BorderLayout.NORTH);
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        actions.add(btnAdd);
+        formPanel.add(actions, BorderLayout.SOUTH);
+        panel.add(formPanel, BorderLayout.NORTH);
 
         // Tabla de Procesos
         String[] columns = {"ID", "Nombre", "Computador", "Tipo", "Prioridad", "Memoria (MB)", "Instrucciones", "Deadline"};
@@ -151,26 +133,23 @@ public class ConfigPanel extends JPanel {
     private JPanel createBufferManagerPanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
 
-        // Formulario Superior
-        JPanel formPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        JPanel formPanel = new JPanel(new BorderLayout(10, 10));
         formPanel.setBorder(BorderFactory.createTitledBorder("Crear Nuevo Buffer"));
+        JPanel fieldsPanel = new JPanel(new GridLayout(1, 3, 12, 8));
 
-        formPanel.add(new JLabel("Buffer ID:"));
         txtBufferId = new JTextField("buf_1", 8);
-        formPanel.add(txtBufferId);
-
-        formPanel.add(new JLabel("Capacidad:"));
         txtBufferCapacity = new JTextField("10", 5);
-        formPanel.add(txtBufferCapacity);
-
         cbBufferHost = new JComboBox<>();
-        formPanel.add(new JLabel("Host:"));
-        formPanel.add(cbBufferHost);
+        fieldsPanel.add(createLabeledField("ID del buffer", txtBufferId));
+        fieldsPanel.add(createLabeledField("Capacidad", txtBufferCapacity));
+        fieldsPanel.add(createLabeledField("Computador host", cbBufferHost));
+        formPanel.add(fieldsPanel, BorderLayout.CENTER);
 
         JButton btnAdd = new JButton("Crear Buffer");
         btnAdd.addActionListener(e -> addBuffer());
-        formPanel.add(btnAdd);
-
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        actions.add(btnAdd);
+        formPanel.add(actions, BorderLayout.SOUTH);
         panel.add(formPanel, BorderLayout.NORTH);
 
         // Tabla de Buffers
@@ -184,37 +163,31 @@ public class ConfigPanel extends JPanel {
 
     private JPanel createComputerManagerPanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
-        JPanel globalPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        JPanel globalPanel = new JPanel(new GridLayout(1, 3, 12, 8));
         globalPanel.setBorder(BorderFactory.createTitledBorder("Configuración global"));
         txtCycleDuration = new JTextField(String.valueOf(simulation.getCycleDurationMs()), 6);
         txtNetworkLatency = new JTextField(String.valueOf(simulation.getNetworkLatencyCycles()), 6);
-        globalPanel.add(new JLabel("Duración del ciclo (ms):"));
-        globalPanel.add(txtCycleDuration);
-        globalPanel.add(new JLabel("Latencia de red (ciclos):"));
-        globalPanel.add(txtNetworkLatency);
+        globalPanel.add(createLabeledField("Duración del ciclo (ms)", txtCycleDuration));
+        globalPanel.add(createLabeledField("Latencia de red (ciclos)", txtNetworkLatency));
         JButton applyGlobal = new JButton("Aplicar");
         applyGlobal.addActionListener(e -> applyGlobalSettings());
         globalPanel.add(applyGlobal);
 
-        JPanel form = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        JPanel form = new JPanel(new GridLayout(1, 5, 12, 8));
         form.setBorder(BorderFactory.createTitledBorder("Agregar computador"));
         txtComputerId = new JTextField("1", 4);
         txtComputerRam = new JTextField("1024", 6);
         cbComputerPolicy = new JComboBox<>(SchedulingPolicyType.values());
         txtComputerQuantum = new JTextField("2", 4);
-        form.add(new JLabel("ID:"));
-        form.add(txtComputerId);
-        form.add(new JLabel("RAM (MB):"));
-        form.add(txtComputerRam);
-        form.add(new JLabel("Política:"));
-        form.add(cbComputerPolicy);
-        form.add(new JLabel("Quantum:"));
-        form.add(txtComputerQuantum);
+        form.add(createLabeledField("ID", txtComputerId));
+        form.add(createLabeledField("RAM (MB)", txtComputerRam));
+        form.add(createLabeledField("Política de planificación", cbComputerPolicy));
+        form.add(createLabeledField("Quantum", txtComputerQuantum));
         JButton addComputer = new JButton("Agregar computador");
         addComputer.addActionListener(e -> addComputer());
         form.add(addComputer);
 
-        JPanel top = new JPanel(new GridLayout(2, 1));
+        JPanel top = new JPanel(new GridLayout(2, 1, 0, 10));
         top.add(globalPanel);
         top.add(form);
         panel.add(top, BorderLayout.NORTH);
@@ -224,6 +197,13 @@ public class ConfigPanel extends JPanel {
         panel.add(new JScrollPane(new JTable(computerTableModel)), BorderLayout.CENTER);
         refreshComputerChoices();
         return panel;
+    }
+
+    private JPanel createLabeledField(String label, JComponent field) {
+        JPanel container = new JPanel(new BorderLayout(0, 5));
+        container.add(new JLabel(label), BorderLayout.NORTH);
+        container.add(field, BorderLayout.CENTER);
+        return container;
     }
 
     private void applyGlobalSettings() {

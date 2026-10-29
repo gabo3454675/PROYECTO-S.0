@@ -9,7 +9,7 @@ import java.io.File;
 import java.io.IOException;
 
 /**
- * Ventana Principal de ÁvilaOS con pestañas para Vista 1 (Configuración) y Vista 2 (Monitor).
+ * Ventana principal de ÁvilaOS con las pestañas de configuración y monitor.
  */
 public class MainFrame extends JFrame {
 
@@ -26,7 +26,8 @@ public class MainFrame extends JFrame {
 
     private void initUI() {
         setTitle("ÁvilaOS - Simulador de Sistema Operativo Distribuido");
-        setSize(1000, 780);
+        setSize(1280, 900);
+        setMinimumSize(new java.awt.Dimension(1024, 700));
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
 
@@ -46,8 +47,8 @@ public class MainFrame extends JFrame {
         configPanel = new ConfigPanel(simulation);
         monitorPanel = new MonitorPanel(simulation);
 
-        tabbedPane.addTab("Vista 1: Configuración", configPanel);
-        tabbedPane.addTab("Vista 2: Monitor en Tiempo Real", monitorPanel);
+        tabbedPane.addTab("Configuración", configPanel);
+        tabbedPane.addTab("Monitor", monitorPanel);
 
         // Al cambiar a la pestaña de monitor, actualizar datos
         tabbedPane.addChangeListener(e -> {
@@ -153,7 +154,7 @@ public class MainFrame extends JFrame {
                 simulation = loaded;
                 buildTabs();
                 pack();
-                setSize(1100, 850);
+                setSize(1280, 900);
                 JOptionPane.showMessageDialog(this, "Configuración cargada y validada con éxito.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(this, "Error al cargar la configuración:\n" + ex.getMessage(), "Error de Validación / Carga", JOptionPane.ERROR_MESSAGE);
