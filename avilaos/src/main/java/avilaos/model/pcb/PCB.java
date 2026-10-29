@@ -21,9 +21,20 @@ public final class PCB {
     private BlockReason blockReason;
     private int quantumUsed;
     private int networkLatencyRemaining;
+    private final String bufferId;
+    private final int produceConsumeInterval;
+    private final int elementsRequired;
+    private int elementsProcessed;
 
     public PCB(String name, int computerId, ProcessType type, int priority,
                long memoryRequired, long deadline, long remainingTime) {
+        this(name, computerId, type, priority, memoryRequired, deadline, remainingTime,
+                null, 0, 0);
+    }
+
+    public PCB(String name, int computerId, ProcessType type, int priority,
+               long memoryRequired, long deadline, long remainingTime, String bufferId,
+               int produceConsumeInterval, int elementsRequired) {
         this.id = IDGenerator.getNextId();
         this.name = name;
         this.computerId = computerId;
@@ -38,6 +49,10 @@ public final class PCB {
         this.blockReason = null;
         this.quantumUsed = 0;
         this.networkLatencyRemaining = 0;
+        this.bufferId = bufferId;
+        this.produceConsumeInterval = produceConsumeInterval;
+        this.elementsRequired = elementsRequired;
+        this.elementsProcessed = 0;
     }
 
     public long getId() {
@@ -142,6 +157,26 @@ public final class PCB {
 
     public void decrementNetworkLatency() {
         if (networkLatencyRemaining > 0) networkLatencyRemaining--;
+    }
+
+    public String getBufferId() {
+        return bufferId;
+    }
+
+    public int getProduceConsumeInterval() {
+        return produceConsumeInterval;
+    }
+
+    public int getElementsRequired() {
+        return elementsRequired;
+    }
+
+    public int getElementsProcessed() {
+        return elementsProcessed;
+    }
+
+    public void incrementElementsProcessed() {
+        elementsProcessed++;
     }
 
     public boolean isDeadlineReached(long currentCycle) {

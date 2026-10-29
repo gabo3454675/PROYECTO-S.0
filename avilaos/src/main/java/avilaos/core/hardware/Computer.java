@@ -5,6 +5,7 @@ import avilaos.core.clock.GlobalClock;
 import avilaos.model.interfaces.ClockListener;
 import avilaos.model.enumeration.SchedulingPolicyType;
 import avilaos.kernel.scheduler.FCFSFPolicy;
+import avilaos.kernel.sync.SyncManager;
 
 public class Computer implements ClockListener {
     private final int id;
@@ -14,10 +15,15 @@ public class Computer implements ClockListener {
     private final GlobalClock clock;
 
     public Computer(int id, long ramSizeMB, SchedulingPolicyType initialPolicy, int quantum) {
+        this(id, ramSizeMB, initialPolicy, quantum, null);
+    }
+
+    public Computer(int id, long ramSizeMB, SchedulingPolicyType initialPolicy, int quantum,
+                    SyncManager sharedSyncManager) {
         this.id = id;
         this.ram = new RAM(ramSizeMB);
         this.cpu = new CPU(id);
-        this.kernel = new Kernel(this, initialPolicy, quantum);
+        this.kernel = new Kernel(this, initialPolicy, quantum, sharedSyncManager);
         this.clock = GlobalClock.getInstance();
         this.clock.addListener(this);
     }
@@ -45,6 +51,10 @@ public class Computer implements ClockListener {
 
     public int getId() {
         return id;
+    }
+
+    public GlobalClock getClock() {
+        return clock;
     }
 
     public void shutdown() {

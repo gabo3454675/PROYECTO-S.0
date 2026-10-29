@@ -42,12 +42,13 @@
 
 ### Tareas
 
-- [x] Vista 1: tablas editables de computadores/procesos/buffers con validación
-- [x] Vista 2: monitor en tiempo real (CPU, colas, RAM, buffers, log)
+- [x] Vista 1: configuración global y por computador; procesos y buffers por host
+- [x] Vista 2: monitor por computador y panel global (CPU, colas, RAM, buffers, log)
 - [x] Cambio de política en runtime desde la GUI
-- [x] Persistencia: guardar/cargar configuración JSON
+- [x] Persistencia: guardar/cargar configuración JSON multi-computador
+- [x] Métricas visibles: utilización de CPU y throughput global y por computador
 - [x] Exportación: PNG / CSV / HTML desde el dashboard
-- [x] Tests completos: `mvn clean test` debe pasar sin errores
+- [x] Tests completos (73 tests pasando): `mvn clean test` debe pasar sin errores
 
 ### Commits esperados
 - `feat: vista 1 configuración con validaciones`
@@ -58,8 +59,10 @@
 ### Hecho cuando
 - [x] GUI funcional con ambas vistas
 - [x] Configuración se guarda y carga en JSON
-- [x] 56 tests pasan en `mvn clean test`
-- [x] Repo GitHub limpio con issues cerrados
+- [x] Todos los tests pasan en `mvn clean test`
+- [x] Dashboard exportable a PNG, CSV y HTML
+- [x] Configuración con varios computadores se carga y ejecuta de forma distribuida
+- [ ] Repo GitHub limpio con issues cerrados
 
 ---
 

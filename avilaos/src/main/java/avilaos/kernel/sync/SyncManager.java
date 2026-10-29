@@ -27,6 +27,10 @@ public class SyncManager {
     }
 
     public Buffer createBuffer(String id, int capacity, int hostComputerId) {
+        if (id == null || id.isBlank()) throw new IllegalArgumentException("Buffer ID requerido.");
+        if (capacity <= 0) throw new IllegalArgumentException("La capacidad debe ser positiva.");
+        if (hostComputerId < 0) throw new IllegalArgumentException("El host del buffer no puede ser negativo.");
+        if (getBuffer(id) != null) throw new IllegalArgumentException("Ya existe el buffer " + id + ".");
         Buffer buffer = new Buffer(id, capacity, hostComputerId, onUnblockCallback, networkLatencyCycles);
         buffers.add(buffer);
         return buffer;

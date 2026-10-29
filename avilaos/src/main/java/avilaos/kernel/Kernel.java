@@ -16,6 +16,7 @@ import avilaos.model.pcb.PCB;
 import avilaos.model.enumeration.ProcessState;
 import avilaos.model.enumeration.SchedulingPolicyType;
 import avilaos.model.enumeration.BlockReason;
+import avilaos.model.enumeration.ProcessType;
 import avilaos.util.datastructures.Queue;
 import avilaos.util.datastructures.LinkedQueue;
 import avilaos.util.datastructures.List;
@@ -34,12 +35,22 @@ public class Kernel {
     private final List<StateChangeListener> stateListeners;
 
     private long currentCycle;
+    private long cyclesExecuted;
+    private long busyCycles;
+    private int quantum;
 
     public Kernel(Computer computer, SchedulingPolicyType initialPolicy, int quantum) {
+        this(computer, initialPolicy, quantum, null);
+    }
+
+    public Kernel(Computer computer, SchedulingPolicyType initialPolicy, int quantum,
+                  SyncManager sharedSyncManager) {
         this.computer = computer;
         this.cpu = computer.getCpu();
         this.memoryManager = new MemoryManager(computer.getRam());
-        this.syncManager = new SyncManager(this::onProcessUnblocked);
+        this.syncManager = sharedSyncManager != null
+                ? sharedSyncManager
+                : new SyncManager(this::onProcessUnblocked);
         this.processManager = new ProcessManager();
 
         this.terminatedQueue = new LinkedQueue<>();
@@ -50,8 +61,11 @@ public class Kernel {
             blockedQueues.add(new LinkedQueue<>());
         }
 
+        this.quantum = quantum;
         this.scheduler = new Scheduler(createPolicy(initialPolicy, quantum));
         this.currentCycle = 0;
+        this.cyclesExecuted = 0;
+        this.busyCycles = 0;
     }
 
     private avilaos.model.interfaces.SchedulingPolicy createPolicy(SchedulingPolicyType type, int quantum) {
@@ -65,6 +79,7 @@ public class Kernel {
 
     public void executeCycle(long currentCycle) {
         this.currentCycle = currentCycle;
+        cpu.resetCycleCounter();
 
         handleDeadlines();
         memoryManager.checkNewQueue(scheduler);
@@ -87,6 +102,10 @@ public class Kernel {
         }
 
         handleBlockedProcesses();
+        cyclesExecuted++;
+        if (cpu.getInstructionsExecutedThisCycle() > 0) {
+            busyCycles++;
+        }
     }
 
     private void checkPreemption() {
@@ -153,6 +172,10 @@ public class Kernel {
     }
 
     private void handleRunningProcess(PCB pcb) {
+        if (pcb.getState() == ProcessState.RUNNING && pcb.getRemainingTime() > 0) {
+            runSynchronizationOperation(pcb);
+        }
+
         if (pcb.getState() == ProcessState.TERMINATED) {
             cpu.contextSwitch(null);
             terminateProcess(pcb);
@@ -172,6 +195,44 @@ public class Kernel {
         }
 
         applyRoundRobinPreemption(pcb);
+    }
+
+    private void runSynchronizationOperation(PCB pcb) {
+        if (pcb.getType() != ProcessType.PRODUCER && pcb.getType() != ProcessType.CONSUMER) return;
+        if (pcb.getBufferId() == null || pcb.getProduceConsumeInterval() <= 0
+                || pcb.getElementsRequired() <= 0) {
+            throw new IllegalStateException("El proceso " + pcb.getName()
+                    + " requiere buffer, intervalo y cantidad de elementos válidos.");
+        }
+        if (pcb.getElementsProcessed() >= pcb.getElementsRequired()
+                || pcb.getProgramCounter() % pcb.getProduceConsumeInterval() != 0) {
+            return;
+        }
+
+        avilaos.kernel.sync.Buffer buffer = syncManager.getBuffer(pcb.getBufferId());
+        if (buffer == null) {
+            throw new IllegalStateException("No existe el buffer " + pcb.getBufferId()
+                    + " del proceso " + pcb.getName() + ".");
+        }
+
+        boolean completed;
+        try {
+            if (pcb.getType() == ProcessType.PRODUCER) {
+                completed = buffer.put(pcb, pcb.getName() + "-" + (pcb.getElementsProcessed() + 1));
+            } else {
+                completed = buffer.get(pcb) != null;
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Se interrumpió la sincronización del proceso " + pcb.getName(), ex);
+        }
+
+        if (!completed || pcb.getState() == ProcessState.BLOCKED) return;
+        pcb.incrementElementsProcessed();
+        if (pcb.getElementsProcessed() >= pcb.getElementsRequired()) {
+            pcb.setRemainingTime(0);
+            pcb.setState(ProcessState.TERMINATED);
+        }
     }
 
     private void applyRoundRobinPreemption(PCB pcb) {
@@ -268,16 +329,22 @@ public class Kernel {
     }
 
     public void unblockProcess(PCB pcb) {
-        BlockReason reason = pcb.getBlockReason();
-        if (reason != null) {
-            int index = reason.ordinal();
-            if (index < blockedQueues.size()) {
-                blockedQueues.get(index).remove(pcb);
-            }
+        for (int i = 0; i < blockedQueues.size(); i++) {
+            blockedQueues.get(i).remove(pcb);
         }
+        if (pcb.getState() == ProcessState.TERMINATED) return;
         pcb.setState(ProcessState.READY);
         pcb.setBlockReason(null);
-        scheduler.addToReady(pcb);
+        boolean alreadyReady = false;
+        for (PCB ready : scheduler.getReadyQueue()) {
+            if (ready == pcb) {
+                alreadyReady = true;
+                break;
+            }
+        }
+        if (!alreadyReady) {
+            scheduler.addToReady(pcb);
+        }
     }
 
     public void terminateProcess(PCB pcb) {
@@ -289,6 +356,7 @@ public class Kernel {
     public void changeSchedulingPolicy(SchedulingPolicyType type, int quantum) {
         avilaos.model.interfaces.SchedulingPolicy newPolicy = createPolicy(type, quantum);
         scheduler.setPolicy(newPolicy);
+        this.quantum = quantum;
     }
 
     public Computer getComputer() {
@@ -336,13 +404,27 @@ public class Kernel {
         return currentCycle;
     }
 
+    public int getQuantum() {
+        return quantum;
+    }
+
+    public double getCpuUtilization() {
+        return cyclesExecuted == 0 ? 0.0 : (double) busyCycles * 100.0 / cyclesExecuted;
+    }
+
+    public double getThroughput() {
+        return cyclesExecuted == 0 ? 0.0 : (double) terminatedQueue.size() / cyclesExecuted;
+    }
+
+    public long getCyclesExecuted() {
+        return cyclesExecuted;
+    }
+
     public void setNetworkLatencyCycles(int cycles) {
         syncManager.setNetworkLatencyCycles(cycles);
     }
 
     private void onProcessUnblocked(PCB pcb) {
-        if (pcb.getState() == avilaos.model.enumeration.ProcessState.READY) {
-            scheduler.addToReady(pcb);
-        }
+        unblockProcess(pcb);
     }
 }
