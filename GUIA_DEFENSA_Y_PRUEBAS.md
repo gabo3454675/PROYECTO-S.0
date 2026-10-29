@@ -38,7 +38,7 @@ configuración hasta el resultado:
    procesos por estado para el computador seleccionado. La configuración
    también se puede guardar en JSON y el monitor se puede exportar.
 
-Al pulsar **Avanzar 1 Ciclo**, el reloj de simulación aumenta una unidad y cada
+Al pulsar **Avanzar ciclo**, el reloj de simulación aumenta una unidad y cada
 computador ejecuta ese ciclo. Esto permite observar el comportamiento paso a
 paso sin depender de una espera en tiempo real.
 
@@ -67,17 +67,17 @@ paso sin depender de una espera en tiempo real.
 | **Latencia de red** | Número de ciclos de espera cuando el computador del proceso no es el host del buffer. |
 | **Utilización de CPU** | Porcentaje de ciclos en que la CPU ejecutó al menos una instrucción: `ciclos ocupados / ciclos observados × 100`. |
 | **Throughput** | Procesos completados por ciclo global: `procesos terminados / ciclos transcurridos`. Es una medida acumulada durante la simulación. |
-| **Persistencia JSON** | Guardar y reconstruir la configuración desde un archivo de texto JSON. No es una base de datos. |
+| **Persistencia JSON** | Guardar y reconstruir la configuración desde un archivo de texto JSON. No es una base de datos ni un checkpoint de ejecución. |
+| **Memoria de proceso** | Se configura en MB y se convierte a bytes para contabilizar la RAM del computador. |
 
 ### Diferencia entre el ciclo y la duración configurada
 
-La duración configurada del ciclo (en milisegundos) pertenece al reloj
-automático `GlobalClock`. La interfaz gráfica actual no inicia ese reloj: su
-control disponible es **Avanzar 1 Ciclo**, que avanza inmediatamente un ciclo
-lógico en todos los computadores. Para una prueba reproducible, usa el avance
-manual y anota el ciclo mostrado en pantalla. No presentes la GUI como una
-ejecución automática hasta que se agregue un control para iniciar y pausar el
-reloj.
+La duración configurada del ciclo (en milisegundos) determina el intervalo del
+avance automático de la interfaz. **Iniciar** y **Pausar** controlan ese avance;
+**Avanzar ciclo** sigue disponible para pasos manuales, incluso después de una
+pausa. Cada paso incrementa el ciclo global y ejecuta todos los computadores.
+Al cargar otra configuración se detiene el timer anterior; al cerrar la ventana
+también se detiene.
 
 ## 4. Estructura del código
 
@@ -132,12 +132,11 @@ mvn exec:java
 - `mvn exec:java` inicia la aplicación gráfica. Necesita una sesión de Windows
   con escritorio disponible.
 
-Al momento de escribir esta guía, en el entorno de desarrollo se comprobó
-`mvn clean verify` con **73 pruebas aprobadas, cero fallos y cero errores**.
-Maven descargó correctamente el plugin de empaquetado que antes no podía
-resolverse por DNS. Si vuelve a fallar una descarga, verifica tu conexión y
-proxy/DNS y vuelve a ejecutar `mvn clean verify`; el error de descarga se
-identifica porque Maven no puede acceder a `repo.maven.apache.org`.
+Ejecuta `mvn clean verify` para validar el estado actual del código y generar
+el JAR. El workflow de CI ejecuta la misma verificación con JDK 21. Si Maven no
+puede descargar un plugin o dependencia, verifica la conexión y proxy/DNS y
+repite el comando; el error de descarga se identifica porque Maven no puede
+acceder a `repo.maven.apache.org`.
 
 El JAR de Maven se genera como artefacto de empaquetado; para ejecutar la
 aplicación en desarrollo, el comando recomendado es `mvn exec:java`, que
@@ -166,8 +165,10 @@ la ejecución distribuida, la latencia y la sincronización.
 1. Ve a la pestaña **Monitor**.
 2. Selecciona el computador `0` en el control **Computador**. Observa proceso en
    CPU, memoria y colas de ese nodo.
-3. Pulsa **Avanzar 1 Ciclo** varias veces. El número de ciclo global debe
-   aumentar y ambos computadores avanzan en cada paso.
+3. Pulsa **Avanzar ciclo** varias veces. El número de ciclo global debe
+   aumentar y ambos computadores avanzan en cada paso. También puedes pulsar
+   **Iniciar** para que el timer avance según el intervalo configurado; pulsa
+   **Pausar** antes de continuar con la inspección manual.
 4. Cambia la selección al computador `1`. Su CPU, RAM y colas son las de ese
    computador, no una copia del nodo `0`.
 5. Revisa los buffers y el log. El consumidor remoto puede quedar bloqueado por
@@ -184,7 +185,8 @@ la ejecución distribuida, la latencia y la sincronización.
    comprobar que incluye el ciclo, colas y métricas.
 8. Usa **Archivo → Guardar Configuración (JSON)...**. Carga ese archivo y
    verifica que se conservan ambos computadores, sus políticas, procesos y
-   buffers.
+   buffers. La carga crea una nueva simulación desde esa configuración; no
+   restaura el ciclo ni el estado de ejecución.
 
 Los valores exactos de las colas dependen del número de ciclos que avances. Para
 comparar resultados, carga de nuevo el JSON antes de repetir la demostración y
@@ -316,7 +318,8 @@ simulación, no instrucciones por segundo de un computador real.
 **¿Qué se guarda en el JSON?**
 
 Duración y latencia globales, computadores y sus políticas, procesos y buffers.
-La configuración se puede reconstruir para ejecutar una nueva simulación.
+La configuración se puede reconstruir para ejecutar una nueva simulación; no
+se guardan colas en curso ni un checkpoint.
 
 **¿Cómo se comprueba que los cambios no rompieron el proyecto?**
 

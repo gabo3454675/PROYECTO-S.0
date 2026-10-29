@@ -46,6 +46,16 @@ public class Semaphore {
         }
     }
 
+    public boolean cancelWait(PCB pcb) {
+        synchronized (lock) {
+            if (!waitingQueue.remove(pcb)) {
+                return false;
+            }
+            value++;
+            return true;
+        }
+    }
+
     public int getValue() {
         synchronized (lock) {
             return value;

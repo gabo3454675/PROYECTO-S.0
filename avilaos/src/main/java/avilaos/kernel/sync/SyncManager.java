@@ -56,6 +56,12 @@ public class SyncManager {
         }
     }
 
+    public void cancelProcess(PCB process) {
+        for (Buffer buffer : buffers) {
+            buffer.cancelProcess(process);
+        }
+    }
+
     public int getBufferCount() {
         return buffers.size();
     }

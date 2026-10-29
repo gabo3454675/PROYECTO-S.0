@@ -12,8 +12,11 @@ Simulador de un sistema operativo distribuido escrito en Java para la asignatura
 
 ```bash
 mvn clean test
+mvn clean verify
 mvn exec:java
 ```
+
+`mvn clean verify` ejecuta las pruebas y empaqueta el proyecto.
 
 `mvn exec:java` inicia la aplicación gráfica y requiere un entorno de escritorio.
 
@@ -47,11 +50,14 @@ CSV o HTML.
 La pestaña **Computadores / Global** permite configurar el reloj, la latencia de
 red y los computadores de la simulación. El monitor ejecuta cada ciclo en todos
 los computadores y permite consultar sus colas, CPU y RAM de forma individual.
-La carga de JSON reconstruye todos los computadores y conserva la asignación de
-procesos y buffers.
+**Avanzar ciclo** permite el avance paso a paso; **Iniciar** y **Pausar** activan
+o detienen el avance automático según la duración configurada. La carga de JSON
+reconstruye la configuración de los computadores, procesos y buffers; no guarda
+un punto de control de una simulación ya iniciada.
 
 Para estudiar la arquitectura, preparar una defensa y seguir pruebas manuales,
 consulta la [Guía de defensa y pruebas](./GUIA_DEFENSA_Y_PRUEBAS.md).
+La estructura real de componentes se describe en [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
 ## Convención de trabajo
 

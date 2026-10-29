@@ -15,10 +15,13 @@ public record ProcessConfig(
     int produceConsumeInterval,
     int elementsRequired
 ) {
+    private static final long MAX_MEMORY_MB = Long.MAX_VALUE / (1024L * 1024L);
+
     public ProcessConfig {
         if (name == null || name.isBlank()) throw new IllegalArgumentException("Nombre requerido");
         if (instructions <= 0) throw new IllegalArgumentException("Instrucciones > 0");
         if (memoryRequired <= 0) throw new IllegalArgumentException("Memoria > 0");
+        if (memoryRequired > MAX_MEMORY_MB) throw new IllegalArgumentException("Memoria excede el límite representable");
         if (priority < 0) throw new IllegalArgumentException("Prioridad >= 0");
         if (deadline < 0) throw new IllegalArgumentException("Deadline >= 0");
         if (type == null) throw new IllegalArgumentException("Tipo requerido");

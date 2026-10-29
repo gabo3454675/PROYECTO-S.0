@@ -48,7 +48,7 @@
 - [x] Persistencia: guardar/cargar configuración JSON multi-computador
 - [x] Métricas visibles: utilización de CPU y throughput global y por computador
 - [x] Exportación: PNG / CSV / HTML desde el dashboard
-- [x] Tests completos (73 tests pasando): `mvn clean test` debe pasar sin errores
+- [x] Suite automatizada: ejecutar `mvn clean verify` para validar pruebas y empaquetado
 
 ### Commits esperados
 - `feat: vista 1 configuración con validaciones`

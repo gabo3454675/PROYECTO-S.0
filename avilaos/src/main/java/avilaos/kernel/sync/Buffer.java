@@ -213,6 +213,16 @@ public class Buffer {
         }
     }
 
+    public void cancelProcess(PCB process) {
+        synchronized (bufferLock) {
+            activePuts.remove(process.getId());
+            activeGets.remove(process.getId());
+            semEmpty.cancelWait(process);
+            semFull.cancelWait(process);
+            semMutex.cancelWait(process);
+        }
+    }
+
     public int getNetworkLatencyCycles() {
         return networkLatencyCycles;
     }

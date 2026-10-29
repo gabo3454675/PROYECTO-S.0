@@ -1,18 +1,24 @@
 package avilaos.core.hardware;
 
 public class RAM {
+    private static final long BYTES_PER_MB = 1024L * 1024L;
+
     private final long totalSize;
     private long usedSize;
 
     public RAM(long totalSizeMB) {
         if (totalSizeMB <= 0) throw new IllegalArgumentException("RAM size > 0");
-        this.totalSize = totalSizeMB * 1024 * 1024;
+        try {
+            this.totalSize = Math.multiplyExact(totalSizeMB, BYTES_PER_MB);
+        } catch (ArithmeticException ex) {
+            throw new IllegalArgumentException("El tamaño de RAM excede el límite representable.", ex);
+        }
         this.usedSize = 0;
     }
 
     public boolean allocate(long sizeBytes) {
         if (sizeBytes <= 0) return false;
-        if (usedSize + sizeBytes <= totalSize) {
+        if (sizeBytes <= totalSize - usedSize) {
             usedSize += sizeBytes;
             return true;
         }
@@ -26,7 +32,7 @@ public class RAM {
     }
 
     public boolean canAllocate(long sizeBytes) {
-        return sizeBytes > 0 && usedSize + sizeBytes <= totalSize;
+        return sizeBytes > 0 && sizeBytes <= totalSize - usedSize;
     }
 
     public long getTotalSize() {

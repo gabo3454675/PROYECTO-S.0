@@ -2,21 +2,32 @@ package avilaos.kernel.memory;
 
 import avilaos.core.hardware.RAM;
 import avilaos.model.pcb.PCB;
+import avilaos.util.datastructures.AssociativeList;
 import avilaos.util.datastructures.Queue;
 import avilaos.util.datastructures.LinkedQueue;
 
 public class MemoryManager {
+    private static final long BYTES_PER_MB = 1024L * 1024L;
+
     private final RAM ram;
     private final Queue<PCB> newQueue;
+    private final AssociativeList<Long, PCB> allocatedProcesses;
 
     public MemoryManager(RAM ram) {
         this.ram = ram;
         this.newQueue = new LinkedQueue<>();
+        this.allocatedProcesses = new AssociativeList<>();
     }
 
     public boolean admitProcess(PCB pcb) {
-        if (ram.canAllocate(pcb.getMemoryRequired())) {
-            ram.allocate(pcb.getMemoryRequired());
+        long memoryBytes = getMemoryBytes(pcb);
+        if (memoryBytes > ram.getTotalSize()) {
+            throw new IllegalArgumentException("El proceso " + pcb.getName()
+                    + " requiere más memoria que la RAM total disponible.");
+        }
+        if (ram.canAllocate(memoryBytes)) {
+            ram.allocate(memoryBytes);
+            allocatedProcesses.put(pcb.getId(), pcb);
             pcb.setState(avilaos.model.enumeration.ProcessState.READY);
             return true;
         } else {
@@ -26,12 +37,18 @@ public class MemoryManager {
     }
 
     public void addToNewQueue(PCB pcb) {
+        if (getMemoryBytes(pcb) > ram.getTotalSize()) {
+            throw new IllegalArgumentException("El proceso " + pcb.getName()
+                    + " requiere más memoria que la RAM total disponible.");
+        }
         pcb.setState(avilaos.model.enumeration.ProcessState.NEW);
         newQueue.enqueue(pcb);
     }
 
     public void releaseProcess(PCB pcb) {
-        ram.free(pcb.getMemoryRequired());
+        if (allocatedProcesses.remove(pcb.getId()) != null) {
+            ram.free(getMemoryBytes(pcb));
+        }
         pcb.setState(avilaos.model.enumeration.ProcessState.TERMINATED);
     }
 
@@ -39,9 +56,11 @@ public class MemoryManager {
         int size = newQueue.size();
         for (int i = 0; i < size; i++) {
             PCB pcb = newQueue.peek();
-            if (ram.canAllocate(pcb.getMemoryRequired())) {
+            long memoryBytes = getMemoryBytes(pcb);
+            if (ram.canAllocate(memoryBytes)) {
                 newQueue.dequeue();
-                ram.allocate(pcb.getMemoryRequired());
+                ram.allocate(memoryBytes);
+                allocatedProcesses.put(pcb.getId(), pcb);
                 pcb.setState(avilaos.model.enumeration.ProcessState.READY);
                 scheduler.addToReady(pcb);
             } else {
@@ -56,5 +75,17 @@ public class MemoryManager {
 
     public RAM getRam() {
         return ram;
+    }
+
+    private long getMemoryBytes(PCB pcb) {
+        if (pcb.getMemoryRequired() <= 0) {
+            throw new IllegalArgumentException("La memoria del proceso debe ser positiva.");
+        }
+        try {
+            return Math.multiplyExact(pcb.getMemoryRequired(), BYTES_PER_MB);
+        } catch (ArithmeticException ex) {
+            throw new IllegalArgumentException("La memoria solicitada por el proceso "
+                    + pcb.getName() + " excede el límite representable.", ex);
+        }
     }
 }

@@ -135,6 +135,11 @@ public class Kernel {
     }
 
     private void handleDeadlines() {
+        PCB running = cpu.getCurrentProcess();
+        if (running != null && running.isDeadlineReached(currentCycle)) {
+            terminateProcess(running);
+        }
+
         for (int i = 0; i < blockedQueues.size(); i++) {
             Queue<PCB> queue = blockedQueues.get(i);
             int size = queue.size();
@@ -329,10 +334,10 @@ public class Kernel {
     }
 
     public void unblockProcess(PCB pcb) {
+        if (pcb.getState() == ProcessState.TERMINATED || isTerminated(pcb)) return;
         for (int i = 0; i < blockedQueues.size(); i++) {
             blockedQueues.get(i).remove(pcb);
         }
-        if (pcb.getState() == ProcessState.TERMINATED) return;
         pcb.setState(ProcessState.READY);
         pcb.setBlockReason(null);
         boolean alreadyReady = false;
@@ -348,9 +353,28 @@ public class Kernel {
     }
 
     public void terminateProcess(PCB pcb) {
+        if (isTerminated(pcb)) return;
+        if (cpu.getCurrentProcess() == pcb) {
+            cpu.contextSwitch(null);
+        }
+        memoryManager.getNewQueue().remove(pcb);
+        scheduler.removeFromReady(pcb);
+        for (int i = 0; i < blockedQueues.size(); i++) {
+            blockedQueues.get(i).remove(pcb);
+        }
+        syncManager.cancelProcess(pcb);
         memoryManager.releaseProcess(pcb);
         terminatedQueue.enqueue(pcb);
         notifyProcessTerminated(pcb);
+    }
+
+    private boolean isTerminated(PCB pcb) {
+        for (PCB terminated : terminatedQueue) {
+            if (terminated.getId() == pcb.getId()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void changeSchedulingPolicy(SchedulingPolicyType type, int quantum) {
