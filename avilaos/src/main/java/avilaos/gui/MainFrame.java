@@ -7,11 +7,15 @@ import avilaos.simulation.SimulationCluster;
 import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Ventana principal de ÁvilaOS con las pestañas de configuración y monitor.
  */
 public class MainFrame extends JFrame {
+
+    private static final Logger LOGGER = Logger.getLogger(MainFrame.class.getName());
 
     private SimulationCluster simulation;
     private ConfigPanel configPanel;
@@ -36,6 +40,7 @@ public class MainFrame extends JFrame {
         addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
             public void windowClosed(java.awt.event.WindowEvent e) {
+                monitorPanel.dispose();
                 simulation.shutdown();
             }
         });
@@ -144,21 +149,28 @@ public class MainFrame extends JFrame {
     }
 
     private void loadConfiguration() {
+        boolean resumeAutomaticAdvancement = monitorPanel.isAutomaticAdvancementRunning();
+        monitorPanel.pauseAutomaticAdvancement();
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setDialogTitle("Cargar Estado de ÁvilaOS");
-        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File fileToLoad = fileChooser.getSelectedFile();
-            try {
-                SimulationCluster loaded = ConfigManager.loadSimulationFromJson(fileToLoad.getAbsolutePath());
-                simulation.shutdown();
-                simulation = loaded;
-                buildTabs();
-                pack();
-                setSize(1280, 900);
-                JOptionPane.showMessageDialog(this, "Configuración cargada y validada con éxito.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, "Error al cargar la configuración:\n" + ex.getMessage(), "Error de Validación / Carga", JOptionPane.ERROR_MESSAGE);
-            }
+        if (fileChooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            if (resumeAutomaticAdvancement) monitorPanel.startAutomaticAdvancement();
+            return;
+        }
+
+        File fileToLoad = fileChooser.getSelectedFile();
+        try {
+            SimulationCluster loaded = ConfigManager.loadSimulationFromJson(fileToLoad.getAbsolutePath());
+            monitorPanel.dispose();
+            simulation.shutdown();
+            simulation = loaded;
+            buildTabs();
+            pack();
+            setSize(1280, 900);
+            JOptionPane.showMessageDialog(this, "Configuración cargada y validada con éxito.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception ex) {
+            if (resumeAutomaticAdvancement) monitorPanel.startAutomaticAdvancement();
+            JOptionPane.showMessageDialog(this, "Error al cargar la configuración:\n" + ex.getMessage(), "Error de Validación / Carga", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -170,7 +182,10 @@ public class MainFrame extends JFrame {
                     break;
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (ClassNotFoundException | InstantiationException | IllegalAccessException
+                 | UnsupportedLookAndFeelException ex) {
+            LOGGER.log(Level.WARNING, "No se pudo aplicar el tema Nimbus; se usará el tema disponible.", ex);
+        }
 
         SwingUtilities.invokeLater(() -> {
             MainFrame frame = new MainFrame();

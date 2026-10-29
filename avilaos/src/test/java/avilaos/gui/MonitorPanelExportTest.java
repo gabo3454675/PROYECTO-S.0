@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import javax.imageio.ImageIO;
+import javax.swing.SwingUtilities;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -73,6 +74,34 @@ class MonitorPanelExportTest {
                 () -> assertThrows(IllegalArgumentException.class, () -> monitor.exportToPng(null)),
                 () -> assertThrows(IllegalArgumentException.class, () -> monitor.exportToCsv(null)),
                 () -> assertThrows(IllegalArgumentException.class, () -> monitor.exportToHtml(null)));
+    }
+
+    @Test
+    void automaticAdvancementRunsCyclesAndStopsWhenPaused() throws Exception {
+        SimulationCluster simulation = new SimulationCluster();
+        simulation.addComputer(0, 1024, SchedulingPolicyType.FCFS, 2);
+        int originalCycleDuration = simulation.getCycleDurationMs();
+        simulation.setCycleDurationMs(10);
+        MonitorPanel monitor = new MonitorPanel(simulation);
+        try {
+            SwingUtilities.invokeAndWait(monitor::startAutomaticAdvancement);
+
+            long timeout = System.nanoTime() + 2_000_000_000L;
+            while (simulation.getCurrentCycle() == 0 && System.nanoTime() < timeout) {
+                Thread.sleep(10);
+            }
+            assertTrue(simulation.getCurrentCycle() > 0, "El timer debe ejecutar al menos un ciclo.");
+
+            SwingUtilities.invokeAndWait(monitor::pauseAutomaticAdvancement);
+            long pausedCycle = simulation.getCurrentCycle();
+            Thread.sleep(50);
+            assertEquals(pausedCycle, simulation.getCurrentCycle());
+            assertFalse(monitor.isAutomaticAdvancementRunning());
+        } finally {
+            monitor.dispose();
+            simulation.shutdown();
+            simulation.setCycleDurationMs(originalCycleDuration);
+        }
     }
 
     @Test

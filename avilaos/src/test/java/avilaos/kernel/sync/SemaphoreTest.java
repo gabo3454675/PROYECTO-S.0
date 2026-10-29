@@ -117,4 +117,17 @@ public class SemaphoreTest {
         assertEquals(2, semaphore.getValue());
         assertEquals(0, semaphore.getWaitingCount());
     }
+
+    @Test
+    @DisplayName("Cancelar una espera restaura el contador y quita el proceso de la cola")
+    void testCancelWaitRestoresSemaphoreCount() {
+        Semaphore sem = new Semaphore(0);
+        PCB pcb = createTestProcess("CancelledProc");
+        sem.wait(pcb);
+
+        assertTrue(sem.cancelWait(pcb));
+        assertFalse(sem.cancelWait(pcb));
+        assertEquals(0, sem.getValue());
+        assertEquals(0, sem.getWaitingCount());
+    }
 }

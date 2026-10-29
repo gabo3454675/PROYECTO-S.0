@@ -45,6 +45,8 @@ public class MonitorPanel extends JPanel {
     private JPanel dashboardContent;
     private JComboBox<SchedulingPolicyType> cbPolicy;
     private JButton btnAdvanceCycle;
+    private JButton btnStart;
+    private JButton btnPause;
     private JComboBox<Integer> cbComputer;
     private JLabel lblCpuUtilization;
     private JLabel lblThroughput;
@@ -75,6 +77,7 @@ public class MonitorPanel extends JPanel {
     private final DefaultPieDataset<String> processStateDataset = new DefaultPieDataset<>();
     private JFreeChart cpuChart;
     private JFreeChart processStateChart;
+    private Timer automaticCycleTimer;
 
     public MonitorPanel(Kernel kernel) {
         this.simulation = null;
@@ -131,14 +134,22 @@ public class MonitorPanel extends JPanel {
         cbPolicy.addActionListener(e -> changePolicy());
 
         btnAdvanceCycle = new JButton("Avanzar ciclo");
-        btnAdvanceCycle.addActionListener(e -> advanceCycle());
+        btnAdvanceCycle.addActionListener(e -> advanceCycle(true));
+        btnStart = new JButton("Iniciar");
+        btnStart.addActionListener(e -> startAutomaticAdvancement());
+        btnPause = new JButton("Pausar");
+        btnPause.addActionListener(e -> pauseAutomaticAdvancement());
+        btnPause.setEnabled(false);
 
         topPanel.add(lblCurrentCycle);
         topPanel.add(new JLabel("Planificador"));
         topPanel.add(cbPolicy);
         topPanel.add(btnAdvanceCycle);
+        topPanel.add(btnStart);
+        topPanel.add(btnPause);
         headerPanel.add(topPanel, BorderLayout.EAST);
         add(headerPanel, BorderLayout.NORTH);
+        automaticCycleTimer = new Timer(getCycleDurationMs(), e -> advanceCycle(false));
 
         dashboardContent = new JPanel();
         dashboardContent.setLayout(new BoxLayout(dashboardContent, BoxLayout.Y_AXIS));
@@ -279,19 +290,51 @@ public class MonitorPanel extends JPanel {
         return card;
     }
 
-    private void advanceCycle() {
+    private void advanceCycle(boolean logEvent) {
         if (simulation != null) {
             simulation.advanceCycle();
             long nextCycle = simulation.getCurrentCycle();
-            appendLog("Ciclo " + nextCycle + ": ciclo global ejecutado en "
-                    + simulation.getComputers().size() + " computadores.");
+            if (logEvent) {
+                appendLog("Ciclo " + nextCycle + ": ciclo global ejecutado en "
+                        + simulation.getComputers().size() + " computadores.");
+            }
             updateMonitor();
         } else if (kernel != null) {
             long nextCycle = kernel.getCurrentCycle() + 1;
             kernel.executeCycle(nextCycle);
-            appendLog("Ciclo " + nextCycle + ": Ciclo de reloj ejecutado.");
+            if (logEvent) {
+                appendLog("Ciclo " + nextCycle + ": Ciclo de reloj ejecutado.");
+            }
             updateMonitor();
         }
+    }
+
+    public void startAutomaticAdvancement() {
+        automaticCycleTimer.setDelay(getCycleDurationMs());
+        automaticCycleTimer.setInitialDelay(getCycleDurationMs());
+        automaticCycleTimer.start();
+        btnStart.setEnabled(false);
+        btnPause.setEnabled(true);
+    }
+
+    public void pauseAutomaticAdvancement() {
+        automaticCycleTimer.stop();
+        btnStart.setEnabled(true);
+        btnPause.setEnabled(false);
+    }
+
+    public boolean isAutomaticAdvancementRunning() {
+        return automaticCycleTimer.isRunning();
+    }
+
+    public void dispose() {
+        pauseAutomaticAdvancement();
+    }
+
+    private int getCycleDurationMs() {
+        return simulation == null
+                ? kernel.getComputer().getClock().getCycleDurationMs()
+                : simulation.getCycleDurationMs();
     }
 
     private void selectComputer() {
@@ -317,6 +360,9 @@ public class MonitorPanel extends JPanel {
 
     public void updateMonitor() {
         if (kernel == null) return;
+        if (automaticCycleTimer.isRunning()) {
+            automaticCycleTimer.setDelay(getCycleDurationMs());
+        }
 
         lblCurrentCycle.setText("Ciclo "
                 + (simulation == null ? kernel.getCurrentCycle() : simulation.getCurrentCycle()));

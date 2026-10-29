@@ -13,6 +13,7 @@ import avilaos.util.datastructures.AssociativeList;
  * sin interrumpir la ejecución con excepciones no controladas.
  */
 public class SimulationConfigValidator {
+    private static final long MAX_MEMORY_MB = Long.MAX_VALUE / (1024L * 1024L);
 
     /**
      * Valida la configuración completa y retorna un ValidationResult con los errores y advertencias detectados.
@@ -63,6 +64,8 @@ public class SimulationConfigValidator {
 
             if (comp.ramSizeMB() <= 0) {
                 result.addError("El computador " + comp.id() + " debe tener RAM > 0 MB (actual: " + comp.ramSizeMB() + ").");
+            } else if (comp.ramSizeMB() > MAX_MEMORY_MB) {
+                result.addError("La RAM del computador " + comp.id() + " excede el límite representable en bytes.");
             }
             if (comp.quantum() <= 0) {
                 result.addError("El computador " + comp.id() + " debe tener un quantum > 0 (actual: " + comp.quantum() + ").");
@@ -148,6 +151,8 @@ public class SimulationConfigValidator {
 
                 if (proc.memoryRequired() <= 0) {
                     result.addError("El proceso '" + procName + "' debe requerir memoria > 0 (actual: " + proc.memoryRequired() + ").");
+                } else if (proc.memoryRequired() > MAX_MEMORY_MB) {
+                    result.addError("La memoria del proceso '" + procName + "' excede el límite representable en bytes.");
                 }
 
                 // Reglas específicas para Productor / Consumidor
