@@ -91,16 +91,43 @@ class MonitorPanelExportTest {
                 Thread.sleep(10);
             }
             assertTrue(simulation.getCurrentCycle() > 0, "El timer debe ejecutar al menos un ciclo.");
+            SwingUtilities.invokeAndWait(() ->
+                    assertTrue(monitor.getEventLogText().contains("automático")));
 
             SwingUtilities.invokeAndWait(monitor::pauseAutomaticAdvancement);
             long pausedCycle = simulation.getCurrentCycle();
             Thread.sleep(50);
             assertEquals(pausedCycle, simulation.getCurrentCycle());
             assertFalse(monitor.isAutomaticAdvancementRunning());
+            SwingUtilities.invokeAndWait(() ->
+                    assertTrue(monitor.getEventLogText().contains("Avance automático pausado")));
         } finally {
             monitor.dispose();
             simulation.shutdown();
             simulation.setCycleDurationMs(originalCycleDuration);
+        }
+    }
+
+    @Test
+    void eventLogShowsStartupProcessCreationAndTermination() throws Exception {
+        SimulationCluster simulation = new SimulationCluster();
+        simulation.addComputer(0, 1024, SchedulingPolicyType.FCFS, 2);
+        MonitorPanel monitor = new MonitorPanel(simulation);
+        try {
+            assertTrue(monitor.getEventLogText().contains("Monitor listo: 1 computador(es), 0 proceso(s)"));
+
+            PCB process = new PCB("Event worker", 0, ProcessType.CPU_BOUND, 1, 64, 10, 1);
+            simulation.submitProcess(process);
+            SwingUtilities.invokeAndWait(() ->
+                    assertTrue(monitor.getEventLogText().contains("proceso Event worker")));
+
+            simulation.advanceCycle();
+            SwingUtilities.invokeAndWait(() ->
+                    assertTrue(monitor.getEventLogText().contains("Event worker (ID "
+                            + process.getId() + ") terminó")));
+        } finally {
+            monitor.dispose();
+            simulation.shutdown();
         }
     }
 
@@ -121,6 +148,9 @@ class MonitorPanelExportTest {
             String csv = Files.readString(file.toPath(), StandardCharsets.UTF_8);
             assertTrue(csv.contains("\"Métricas globales\",\"0\",\"Utilización CPU (%)\",\"100.0\""));
             assertTrue(csv.contains("\"Métricas globales\",\"0\",\"Throughput (procesos/ciclo)\",\"2.0\""));
+            assertTrue(csv.contains("\"Métricas globales\",\"0\",\"Throughput (procesos/s)\""));
+            assertTrue(csv.contains("\"Métricas globales\",\"0\",\"Tiempo de respuesta promedio (ciclos)\""));
+            assertTrue(csv.contains("\"Métricas globales\",\"0\",\"Índice de equidad de Jain\""));
             assertTrue(csv.contains("\"Gráfico CPU\",\"1\",\"Computador 0\",\"100.0\""));
             assertTrue(csv.contains("\"Gráfico CPU\",\"2\",\"Computador 1\",\"100.0\""));
             assertTrue(csv.contains("\"Gráfico procesos\""));

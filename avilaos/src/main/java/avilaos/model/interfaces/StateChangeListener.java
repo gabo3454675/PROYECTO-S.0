@@ -11,4 +11,7 @@ public interface StateChangeListener {
 
     default void onProcessTerminated(PCB pcb) {
     }
+
+    default void onProcessRemoved(PCB pcb) {
+    }
 }

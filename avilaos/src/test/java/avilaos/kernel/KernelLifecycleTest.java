@@ -118,4 +118,35 @@ class KernelLifecycleTest {
         assertThrows(IllegalArgumentException.class, () -> simulation.submitProcess(process));
         assertTrue(kernel.getNewQueue().isEmpty());
     }
+
+    @Test
+    void removesSelectedProcessFromCpuMemoryQueuesAndMetrics() {
+        PCB process = new PCB("removable", 0, ProcessType.CPU_BOUND, 1, 1, 0, 5);
+        simulation.submitProcess(process);
+        simulation.advanceCycle();
+        assertEquals(ProcessState.RUNNING, process.getState());
+        assertEquals(1024L * 1024L, kernel.getComputer().getRam().getUsedSize());
+
+        assertTrue(kernel.removeProcess(process.getId()));
+
+        assertNull(kernel.getComputer().getCpu().getCurrentProcess());
+        assertTrue(kernel.getReadyQueue().isEmpty());
+        assertTrue(kernel.getTerminatedQueue().isEmpty());
+        assertEquals(0, kernel.getComputer().getRam().getUsedSize());
+        assertEquals(0, kernel.getMetricsCollector().getProcessCount());
+        assertFalse(kernel.removeProcess(process.getId()));
+    }
+
+    @Test
+    void refusesToRemoveBufferStillReferencedByAProcess() {
+        simulation.createBuffer("used-buffer", 1, 0);
+        PCB consumer = new PCB("consumer", 0, ProcessType.CONSUMER, 1, 1, 0,
+                5, "used-buffer", 1, 1);
+        simulation.submitProcess(consumer);
+
+        assertTrue(kernel.hasProcessUsingBuffer("used-buffer"));
+
+        assertTrue(kernel.removeProcess(consumer.getId()));
+        assertFalse(kernel.hasProcessUsingBuffer("used-buffer"));
+    }
 }
