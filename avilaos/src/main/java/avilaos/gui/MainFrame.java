@@ -7,6 +7,9 @@ import avilaos.simulation.SimulationCluster;
 import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
+import java.awt.GraphicsEnvironment;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -20,12 +23,34 @@ public class MainFrame extends JFrame {
     private SimulationCluster simulation;
     private ConfigPanel configPanel;
     private MonitorPanel monitorPanel;
+    private Path activeConfigPath = Path.of("config", "default-simulation.json");
 
     public MainFrame() {
-        simulation = new SimulationCluster();
-        simulation.addComputer(0, 1024L, SchedulingPolicyType.FCFS, 2);
+        simulation = createInitialSimulation();
 
         initUI();
+    }
+
+    static SimulationCluster createInitialSimulation() {
+        File defaultConfig = Path.of("config", "default-simulation.json").toFile();
+        try {
+            if (!Files.isRegularFile(defaultConfig.toPath())) {
+                throw new IOException("No se encontró " + defaultConfig.getAbsolutePath());
+            }
+            return ConfigManager.loadSimulationFromJson(defaultConfig.getPath());
+        } catch (IOException | RuntimeException ex) {
+            LOGGER.log(Level.SEVERE, "No se pudo cargar el escenario inicial de ÁvilaOS.", ex);
+            if (!GraphicsEnvironment.isHeadless()) {
+                JOptionPane.showMessageDialog(null,
+                        "No se pudo cargar el escenario de ejemplo:\n" + ex.getMessage()
+                                + "\nSe iniciará una simulación vacía. Usa Archivo → Cargar Configuración (JSON)... "
+                                + "para abrir un escenario.",
+                        "Escenario inicial no disponible", JOptionPane.WARNING_MESSAGE);
+            }
+            SimulationCluster emptySimulation = new SimulationCluster();
+            emptySimulation.addComputer(0, 1024L, SchedulingPolicyType.FCFS, 2);
+            return emptySimulation;
+        }
     }
 
     private void initUI() {
@@ -50,7 +75,7 @@ public class MainFrame extends JFrame {
         JTabbedPane tabbedPane = new JTabbedPane();
 
         configPanel = new ConfigPanel(simulation);
-        monitorPanel = new MonitorPanel(simulation);
+        monitorPanel = new MonitorPanel(simulation, this::resetScenario);
 
         tabbedPane.addTab("Configuración", configPanel);
         tabbedPane.addTab("Monitor", monitorPanel);
@@ -164,6 +189,7 @@ public class MainFrame extends JFrame {
             monitorPanel.dispose();
             simulation.shutdown();
             simulation = loaded;
+            activeConfigPath = fileToLoad.toPath();
             buildTabs();
             pack();
             setSize(1280, 900);
@@ -171,6 +197,25 @@ public class MainFrame extends JFrame {
         } catch (Exception ex) {
             if (resumeAutomaticAdvancement) monitorPanel.startAutomaticAdvancement();
             JOptionPane.showMessageDialog(this, "Error al cargar la configuración:\n" + ex.getMessage(), "Error de Validación / Carga", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void resetScenario() {
+        try {
+            SimulationCluster reset = ConfigManager.loadSimulationFromJson(activeConfigPath.toString());
+            monitorPanel.dispose();
+            simulation.shutdown();
+            simulation = reset;
+            buildTabs();
+            JOptionPane.showMessageDialog(this,
+                    "Escenario restaurado desde:\n" + activeConfigPath.toAbsolutePath(),
+                    "Simulación reiniciada", JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException | RuntimeException ex) {
+            LOGGER.log(Level.SEVERE, "No se pudo reiniciar el escenario activo.", ex);
+            JOptionPane.showMessageDialog(this,
+                    "No se pudo reiniciar la simulación:\n" + ex.getMessage()
+                            + "\nLa simulación actual se conserva.",
+                    "Error al reiniciar", JOptionPane.ERROR_MESSAGE);
         }
     }
 

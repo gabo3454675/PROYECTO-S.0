@@ -24,6 +24,8 @@ public class ConfigPanel extends JPanel {
     private DefaultTableModel processTableModel;
     private DefaultTableModel bufferTableModel;
     private DefaultTableModel computerTableModel;
+    private JTable processTable;
+    private JTable bufferTable;
 
     private JTextField txtName;
     private JComboBox<ProcessType> cbType;
@@ -64,6 +66,7 @@ public class ConfigPanel extends JPanel {
 
         initUI();
         refreshComputerChoices();
+        refreshTables();
     }
 
     private void initUI() {
@@ -124,8 +127,16 @@ public class ConfigPanel extends JPanel {
         // Tabla de Procesos
         String[] columns = {"ID", "Nombre", "Computador", "Tipo", "Prioridad", "Memoria (MB)", "Instrucciones", "Deadline"};
         processTableModel = new DefaultTableModel(columns, 0);
-        JTable table = new JTable(processTableModel);
-        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        processTable = new JTable(processTableModel);
+        processTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        JPanel tablePanel = new JPanel(new BorderLayout(8, 8));
+        tablePanel.add(new JScrollPane(processTable), BorderLayout.CENTER);
+        JButton removeProcesses = new JButton("Eliminar seleccionados");
+        removeProcesses.addActionListener(e -> handleRemoveSelectedProcesses());
+        JPanel tableActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        tableActions.add(removeProcesses);
+        tablePanel.add(tableActions, BorderLayout.SOUTH);
+        panel.add(tablePanel, BorderLayout.CENTER);
 
         return panel;
     }
@@ -155,8 +166,16 @@ public class ConfigPanel extends JPanel {
         // Tabla de Buffers
         String[] columns = {"ID Buffer", "Equipo Host", "Capacidad"};
         bufferTableModel = new DefaultTableModel(columns, 0);
-        JTable table = new JTable(bufferTableModel);
-        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        bufferTable = new JTable(bufferTableModel);
+        bufferTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        JPanel tablePanel = new JPanel(new BorderLayout(8, 8));
+        tablePanel.add(new JScrollPane(bufferTable), BorderLayout.CENTER);
+        JButton removeBuffers = new JButton("Eliminar seleccionados");
+        removeBuffers.addActionListener(e -> handleRemoveSelectedBuffers());
+        JPanel tableActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        tableActions.add(removeBuffers);
+        tablePanel.add(tableActions, BorderLayout.SOUTH);
+        panel.add(tablePanel, BorderLayout.CENTER);
 
         return panel;
     }
@@ -193,7 +212,9 @@ public class ConfigPanel extends JPanel {
         panel.add(top, BorderLayout.NORTH);
 
         computerTableModel = new DefaultTableModel(
-                new String[]{"ID", "RAM (MB)", "Política", "Quantum", "Ciclos", "CPU (%)", "Throughput"}, 0);
+                new String[]{"ID", "RAM (MB)", "Política", "Quantum", "Ciclos", "CPU (%)",
+                    "Throughput (proc/s)", "Respuesta (ciclos)", "Equidad Jain",
+                    "Espera sem. (ciclos)", "Producidos", "Consumidos"}, 0);
         panel.add(new JScrollPane(new JTable(computerTableModel)), BorderLayout.CENTER);
         refreshComputerChoices();
         return panel;
@@ -338,6 +359,99 @@ public class ConfigPanel extends JPanel {
         }
     }
 
+    private void handleRemoveSelectedProcesses() {
+        try {
+            int removed = removeSelectedProcesses();
+            showMessage("Se eliminaron " + removed + " proceso(s) de la simulación.",
+                    "Procesos eliminados", JOptionPane.INFORMATION_MESSAGE);
+        } catch (IllegalStateException ex) {
+            showMessage(ex.getMessage(), "No se pudieron eliminar los procesos",
+                    JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    int removeSelectedProcesses() {
+        int[] selectedRows = processTable.getSelectedRows();
+        if (selectedRows.length == 0) {
+            throw new IllegalStateException("Selecciona uno o más procesos para eliminar.");
+        }
+
+        for (int selectedRow : selectedRows) {
+            int modelRow = processTable.convertRowIndexToModel(selectedRow);
+            long processId = ((Number) processTableModel.getValueAt(modelRow, 0)).longValue();
+            int computerId = ((Number) processTableModel.getValueAt(modelRow, 2)).intValue();
+            Kernel kernel = simulation == null ? legacyKernel : simulation.getKernel(computerId);
+            if (kernel == null || !kernel.removeProcess(processId)) {
+                refreshTables();
+                throw new IllegalStateException(
+                        "No se encontró un proceso seleccionado. Actualiza la tabla e inténtalo de nuevo.");
+            }
+        }
+
+        refreshTables();
+        refreshComputerChoices();
+        return selectedRows.length;
+    }
+
+    private void handleRemoveSelectedBuffers() {
+        try {
+            int removed = removeSelectedBuffers();
+            showMessage("Se eliminaron " + removed + " buffer(s) de la simulación.",
+                    "Buffers eliminados", JOptionPane.INFORMATION_MESSAGE);
+        } catch (IllegalStateException ex) {
+            showMessage(ex.getMessage(), "No se pudieron eliminar los buffers",
+                    JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    int removeSelectedBuffers() {
+        int[] selectedRows = bufferTable.getSelectedRows();
+        if (selectedRows.length == 0) {
+            throw new IllegalStateException("Selecciona uno o más buffers para eliminar.");
+        }
+
+        for (int selectedRow : selectedRows) {
+            int modelRow = bufferTable.convertRowIndexToModel(selectedRow);
+            String bufferId = (String) bufferTableModel.getValueAt(modelRow, 0);
+            if (isBufferInUse(bufferId)) {
+                throw new IllegalStateException("No se puede eliminar el buffer \"" + bufferId
+                        + "\" porque todavía está asociado a un proceso. Elimina primero esos procesos.");
+            }
+            if (getSyncManager().getBuffer(bufferId) == null) {
+                refreshTables();
+                throw new IllegalStateException(
+                        "El buffer seleccionado ya no existe. Actualiza la tabla e inténtalo de nuevo.");
+            }
+        }
+        for (int selectedRow : selectedRows) {
+            int modelRow = bufferTable.convertRowIndexToModel(selectedRow);
+            String bufferId = (String) bufferTableModel.getValueAt(modelRow, 0);
+            getSyncManager().removeBuffer(bufferId);
+        }
+
+        refreshTables();
+        refreshComputerChoices();
+        return selectedRows.length;
+    }
+
+    private boolean isBufferInUse(String bufferId) {
+        if (simulation == null) {
+            return legacyKernel.hasProcessUsingBuffer(bufferId);
+        }
+        for (int i = 0; i < simulation.getComputers().size(); i++) {
+            if (simulation.getComputers().get(i).getKernel().hasProcessUsingBuffer(bufferId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void showMessage(String message, String title, int messageType) {
+        if (!GraphicsEnvironment.isHeadless()) {
+            JOptionPane.showMessageDialog(this, message, title, messageType);
+        }
+    }
+
     /**
      * Sincroniza las tablas de Vista 1 con el estado actual del Kernel.
      */
@@ -392,7 +506,12 @@ public class ConfigPanel extends JPanel {
                     computer.getId(), computer.getRam().getTotalSize() / (1024L * 1024L),
                     kernel.getScheduler().getPolicy().getType(), kernel.getQuantum(),
                     kernel.getCyclesExecuted(), String.format("%.2f", kernel.getCpuUtilization()),
-                    String.format("%.4f", kernel.getThroughput())
+                    String.format("%.4f", kernel.getThroughputPerSecond()),
+                    String.format("%.2f", kernel.getMetricsCollector().getAverageResponseTime()),
+                    String.format("%.3f", kernel.getMetricsCollector().getFairnessIndex()),
+                    String.format("%.2f", kernel.getMetricsCollector().getAverageSemaphoreBlockedCycles()),
+                    kernel.getMetricsCollector().getProducedElements(),
+                    kernel.getMetricsCollector().getConsumedElements()
             });
         }
     }

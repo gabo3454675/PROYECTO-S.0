@@ -1,5 +1,5 @@
 {
-  "cycleDurationMs" : 100,
+  "cycleDurationMs" : 500,
   "networkLatencyCycles" : 2,
   "computers" : [ {
     "id" : 0,

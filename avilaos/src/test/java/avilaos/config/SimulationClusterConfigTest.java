@@ -84,4 +84,36 @@ class SimulationClusterConfigTest {
             simulation.shutdown();
         }
     }
+
+    @Test
+    void demoConfigurationRunsRemoteProducerAndLocalConsumerWithMetrics() throws IOException {
+        SimulationCluster simulation = ConfigManager.loadSimulationFromJson(
+                "config/producer-consumer-demo.json");
+        try {
+            for (int cycle = 0; cycle < 4; cycle++) {
+                simulation.advanceCycle();
+            }
+
+            assertEquals(1, simulation.getMetricsSnapshot().producedElements());
+            assertEquals(1, simulation.getMetricsSnapshot().consumedElements());
+            assertEquals(2.0, simulation.getMetricsSnapshot().avgSemaphoreBlockedCycles());
+            assertEquals(0, simulation.getKernel(1).getMetricsCollector()
+                    .getSemaphoreWaitEpisodes());
+            assertEquals(5.0, simulation.getMetricsSnapshot().throughputPerSecond(), 0.000001);
+        } finally {
+            simulation.shutdown();
+        }
+    }
+
+    @Test
+    void defaultConfigurationUsesReadableAutomaticCycleDuration() throws IOException {
+        SimulationCluster simulation = ConfigManager.loadSimulationFromJson(
+                "config/default-simulation.json");
+        try {
+            assertEquals(500, simulation.getCycleDurationMs());
+            assertEquals(2, simulation.getComputers().size());
+        } finally {
+            simulation.shutdown();
+        }
+    }
 }
