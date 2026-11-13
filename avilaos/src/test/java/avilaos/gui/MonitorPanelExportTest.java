@@ -114,7 +114,8 @@ class MonitorPanelExportTest {
         simulation.addComputer(0, 1024, SchedulingPolicyType.FCFS, 2);
         MonitorPanel monitor = new MonitorPanel(simulation);
         try {
-            assertTrue(monitor.getEventLogText().contains("Monitor listo: 1 computador(es), 0 proceso(s)"));
+            SwingUtilities.invokeAndWait(() ->
+                    assertTrue(monitor.getEventLogText().contains("Monitor listo: 1 computador(es), 0 proceso(s)")));
 
             PCB process = new PCB("Event worker", 0, ProcessType.CPU_BOUND, 1, 64, 10, 1);
             simulation.submitProcess(process);
