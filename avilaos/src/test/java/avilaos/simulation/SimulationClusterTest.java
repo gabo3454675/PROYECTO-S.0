@@ -13,6 +13,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class SimulationClusterTest {
@@ -24,6 +26,7 @@ class SimulationClusterTest {
         simulation = new SimulationCluster();
         simulation.addComputer(0, 512, SchedulingPolicyType.FCFS, 2);
         simulation.addComputer(1, 1024, SchedulingPolicyType.ROUND_ROBIN, 3);
+        simulation.setCycleDurationMs(100);
     }
 
     @AfterEach
@@ -81,6 +84,22 @@ class SimulationClusterTest {
     }
 
     @Test
+    void eachComputerExecutesTheGlobalCycleOnItsOwnWorkerThread() {
+        AtomicReference<Thread> firstWorker = new AtomicReference<>();
+        AtomicReference<Thread> secondWorker = new AtomicReference<>();
+        simulation.getKernel(0).addMetricsListener(snapshot -> firstWorker.set(Thread.currentThread()));
+        simulation.getKernel(1).addMetricsListener(snapshot -> secondWorker.set(Thread.currentThread()));
+
+        simulation.advanceCycle();
+
+        assertNotNull(firstWorker.get());
+        assertNotNull(secondWorker.get());
+        assertNotSame(Thread.currentThread(), firstWorker.get());
+        assertNotSame(Thread.currentThread(), secondWorker.get());
+        assertNotSame(firstWorker.get(), secondWorker.get());
+    }
+
+    @Test
     void producerAndConsumerExchangeDataAcrossComputersThroughSharedBuffer() {
         simulation.setNetworkLatencyCycles(0);
         simulation.createBuffer("pipeline", 2, 0);
@@ -98,5 +117,49 @@ class SimulationClusterTest {
         assertEquals(1, simulation.getKernel(0).getTerminatedQueue().size());
         assertEquals(1, simulation.getKernel(1).getTerminatedQueue().size());
         assertTrue(simulation.getSyncManager().getBuffer("pipeline").isEmpty());
+    }
+
+    @Test
+    void remoteProducerWaitsForConfiguredNetworkLatencyBeforeDelivery() {
+        simulation.setNetworkLatencyCycles(2);
+        simulation.createBuffer("remote-pipeline", 2, 0);
+        PCB consumer = new PCB("local-consumer", 0, ProcessType.CONSUMER, 1, 64, 0,
+                10, "remote-pipeline", 1, 1);
+        PCB producer = new PCB("remote-producer", 1, ProcessType.PRODUCER, 1, 64, 0,
+                10, "remote-pipeline", 1, 1);
+        simulation.submitProcess(consumer);
+        simulation.submitProcess(producer);
+
+        simulation.advanceCycle();
+        assertEquals(ProcessState.BLOCKED, consumer.getState());
+        assertEquals(BlockReason.SEMAPHORE_WAIT, consumer.getBlockReason());
+        assertEquals(ProcessState.BLOCKED, producer.getState());
+        assertEquals(BlockReason.NETWORK_LATENCY, producer.getBlockReason());
+
+        simulation.advanceCycle();
+        assertEquals(ProcessState.READY, producer.getState());
+        assertEquals(0, producer.getNetworkLatencyRemaining());
+
+        simulation.advanceCycle();
+        assertEquals(ProcessState.TERMINATED, producer.getState());
+        assertEquals(1, producer.getElementsProcessed());
+        assertEquals(ProcessState.READY, consumer.getState());
+
+        simulation.advanceCycle();
+        assertEquals(ProcessState.TERMINATED, consumer.getState());
+        assertEquals(1, consumer.getElementsProcessed());
+        assertTrue(simulation.getSyncManager().getBuffer("remote-pipeline").isEmpty());
+
+        assertEquals(1, simulation.getKernel(0).getMetricsCollector()
+                .getSemaphoreWaitEpisodes());
+        assertEquals(2.0, simulation.getKernel(0).getMetricsCollector()
+                .getAverageSemaphoreBlockedCycles());
+        assertEquals(0, simulation.getKernel(1).getMetricsCollector()
+                .getSemaphoreWaitEpisodes(), "La latencia remota no es espera de semáforo.");
+        assertEquals(1, simulation.getMetricsSnapshot().producedElements());
+        assertEquals(1, simulation.getMetricsSnapshot().consumedElements());
+        assertEquals(1.0, simulation.getMetricsSnapshot().avgResponseTime());
+        assertEquals(1.0, simulation.getMetricsSnapshot().fairnessIndex(), 0.000001);
+        assertEquals(5.0, simulation.getMetricsSnapshot().throughputPerSecond(), 0.000001);
     }
 }

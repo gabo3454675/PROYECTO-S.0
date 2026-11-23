@@ -4,7 +4,7 @@ public record MetricsSnapshot(
     long cycle,
     int computerId,
     double cpuUtilization,
-    double throughput,
+    double throughputPerSecond,
     double avgResponseTime,
     double deadlineCompliance,
     double fairnessIndex,
@@ -12,6 +12,8 @@ public record MetricsSnapshot(
     long processesBlocked,
     long memoryUsed,
     long memoryTotal,
-    double avgSemaphoreBlockedCycles
+    double avgSemaphoreBlockedCycles,
+    long producedElements,
+    long consumedElements
 ) {
 }

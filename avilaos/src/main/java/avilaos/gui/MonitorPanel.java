@@ -5,8 +5,11 @@ import avilaos.core.hardware.RAM;
 import avilaos.core.hardware.Computer;
 import avilaos.kernel.Kernel;
 import avilaos.kernel.sync.Buffer;
+import avilaos.metrics.MetricsSnapshot;
 import avilaos.model.enumeration.BlockReason;
+import avilaos.model.enumeration.ProcessState;
 import avilaos.model.enumeration.SchedulingPolicyType;
+import avilaos.model.interfaces.StateChangeListener;
 import avilaos.model.pcb.PCB;
 import avilaos.simulation.SimulationCluster;
 import avilaos.util.datastructures.List;
@@ -35,6 +38,7 @@ import javax.imageio.ImageIO;
 public class MonitorPanel extends JPanel {
 
     private static final long BYTES_PER_MB = 1024L * 1024L;
+    private static final int MAX_EVENT_LOG_LINES = 500;
 
     private final SimulationCluster simulation;
     private Kernel kernel;
@@ -47,9 +51,16 @@ public class MonitorPanel extends JPanel {
     private JButton btnAdvanceCycle;
     private JButton btnStart;
     private JButton btnPause;
+    private JButton btnReset;
+    private final Runnable resetHandler;
     private JComboBox<Integer> cbComputer;
     private JLabel lblCpuUtilization;
     private JLabel lblThroughput;
+    private JLabel lblAverageResponseTime;
+    private JLabel lblFairnessIndex;
+    private JLabel lblSemaphoreWait;
+    private JLabel lblProducedElements;
+    private JLabel lblConsumedElements;
     private JLabel lblRunningProcess;
     private boolean updatingControls;
 
@@ -82,15 +93,21 @@ public class MonitorPanel extends JPanel {
     public MonitorPanel(Kernel kernel) {
         this.simulation = null;
         this.kernel = kernel;
+        this.resetHandler = null;
         initialize();
     }
 
     public MonitorPanel(SimulationCluster simulation) {
+        this(simulation, null);
+    }
+
+    public MonitorPanel(SimulationCluster simulation, Runnable resetHandler) {
         if (simulation == null || simulation.getComputers().isEmpty()) {
             throw new IllegalArgumentException("La simulación debe tener al menos un computador.");
         }
         this.simulation = simulation;
         this.kernel = simulation.getComputers().get(0).getKernel();
+        this.resetHandler = resetHandler;
         initialize();
     }
 
@@ -100,6 +117,7 @@ public class MonitorPanel extends JPanel {
 
         initComponents();
         applyDarkDashboardStyle();
+        registerEventListeners();
         updateMonitor();
     }
 
@@ -140,6 +158,10 @@ public class MonitorPanel extends JPanel {
         btnPause = new JButton("Pausar");
         btnPause.addActionListener(e -> pauseAutomaticAdvancement());
         btnPause.setEnabled(false);
+        btnReset = new JButton("Reiniciar");
+        btnReset.setEnabled(resetHandler != null);
+        btnReset.setToolTipText("Volver a cargar el último escenario JSON y poner en cero la simulación.");
+        btnReset.addActionListener(e -> confirmReset());
 
         topPanel.add(lblCurrentCycle);
         topPanel.add(new JLabel("Planificador"));
@@ -147,6 +169,7 @@ public class MonitorPanel extends JPanel {
         topPanel.add(btnAdvanceCycle);
         topPanel.add(btnStart);
         topPanel.add(btnPause);
+        topPanel.add(btnReset);
         headerPanel.add(topPanel, BorderLayout.EAST);
         add(headerPanel, BorderLayout.NORTH);
         automaticCycleTimer = new Timer(getCycleDurationMs(), e -> advanceCycle(false));
@@ -154,11 +177,33 @@ public class MonitorPanel extends JPanel {
         dashboardContent = new JPanel();
         dashboardContent.setLayout(new BoxLayout(dashboardContent, BoxLayout.Y_AXIS));
 
-        JPanel metricsPanel = new JPanel(new GridLayout(1, 3, 12, 0));
-        metricsPanel.add(createMetricCard("UTILIZACIÓN CPU", "0.00%", value -> lblCpuUtilization = value));
-        metricsPanel.add(createMetricCard("THROUGHPUT", "0.0000 procesos/ciclo", value -> lblThroughput = value));
-        metricsPanel.add(createMetricCard("PROCESO EN CPU", "En espera", value -> lblRunningProcess = value));
+        JPanel metricsPanel = new JPanel(new GridLayout(2, 4, 12, 12));
+        metricsPanel.add(createMetricCard("CPU GLOBAL", "0.00%", value -> lblCpuUtilization = value));
+        metricsPanel.add(createMetricCard("THROUGHPUT GLOBAL", "0.0000 proc/s", value -> lblThroughput = value));
+        metricsPanel.add(createMetricCard("RESPUESTA PROMEDIO", "0.00 ciclos",
+                value -> lblAverageResponseTime = value));
+        metricsPanel.add(createMetricCard("EQUIDAD DE CPU (JAIN)", "0.000",
+                value -> lblFairnessIndex = value));
+        metricsPanel.add(createMetricCard("ESPERA SEMÁFORO", "0.00 ciclos",
+                value -> lblSemaphoreWait = value));
+        metricsPanel.add(createMetricCard("ELEMENTOS PRODUCIDOS", "0",
+                value -> lblProducedElements = value));
+        metricsPanel.add(createMetricCard("ELEMENTOS CONSUMIDOS", "0",
+                value -> lblConsumedElements = value));
+        metricsPanel.add(createMetricCard("PROCESO EN CPU · NODO", "En espera",
+                value -> lblRunningProcess = value));
         dashboardContent.add(metricsPanel);
+        dashboardContent.add(Box.createVerticalStrut(14));
+
+        JPanel logPanel = createCard("Registro de eventos");
+        logPanel.setLayout(new BorderLayout());
+        txtLog = new JTextArea(5, 50);
+        txtLog.setEditable(false);
+        txtLog.setFont(new Font("Consolas", Font.PLAIN, 12));
+        JScrollPane logScroll = new JScrollPane(txtLog);
+        logScroll.setPreferredSize(new Dimension(600, 130));
+        logPanel.add(logScroll, BorderLayout.CENTER);
+        dashboardContent.add(logPanel);
         dashboardContent.add(Box.createVerticalStrut(14));
 
         JPanel chartsPanel = new JPanel(new GridLayout(1, 2, 12, 0));
@@ -173,7 +218,9 @@ public class MonitorPanel extends JPanel {
 
         processStateChart = ChartFactory.createPieChart(
                 "Procesos por estado · computador seleccionado", processStateDataset, true, true, false);
-        PiePlot<String> statePlot = (PiePlot<String>) processStateChart.getPlot();
+        if (!(processStateChart.getPlot() instanceof PiePlot<?> statePlot)) {
+            throw new IllegalStateException("El gráfico de estados debe ser circular.");
+        }
         statePlot.setSectionPaint("Nuevo", new Color(96, 165, 250));
         statePlot.setSectionPaint("Listo", new Color(251, 191, 36));
         statePlot.setSectionPaint("Ejecución", new Color(72, 187, 153));
@@ -229,16 +276,6 @@ public class MonitorPanel extends JPanel {
         dashboardContent.add(createTablePanel("Buffers y sincronización", buffersModel));
         dashboardContent.add(Box.createVerticalStrut(14));
 
-        JPanel logPanel = createCard("Registro de eventos");
-        logPanel.setLayout(new BorderLayout());
-        txtLog = new JTextArea(5, 50);
-        txtLog.setEditable(false);
-        txtLog.setFont(new Font("Consolas", Font.PLAIN, 12));
-        JScrollPane logScroll = new JScrollPane(txtLog);
-        logScroll.setPreferredSize(new Dimension(600, 150));
-        logPanel.add(logScroll, BorderLayout.CENTER);
-        dashboardContent.add(logPanel);
-
         JScrollPane contentScroll = new JScrollPane(dashboardContent);
         contentScroll.setBorder(BorderFactory.createEmptyBorder());
         contentScroll.getVerticalScrollBar().setUnitIncrement(18);
@@ -262,7 +299,7 @@ public class MonitorPanel extends JPanel {
         JPanel card = createCard(title);
         card.setLayout(new BorderLayout());
         JLabel value = new JLabel(initialValue);
-        value.setFont(new Font("Segoe UI", Font.BOLD, 21));
+        value.setFont(new Font("Segoe UI", Font.BOLD, 17));
         card.add(value, BorderLayout.CENTER);
         valueReceiver.accept(value);
         return card;
@@ -294,17 +331,15 @@ public class MonitorPanel extends JPanel {
         if (simulation != null) {
             simulation.advanceCycle();
             long nextCycle = simulation.getCurrentCycle();
-            if (logEvent) {
-                appendLog("Ciclo " + nextCycle + ": ciclo global ejecutado en "
-                        + simulation.getComputers().size() + " computadores.");
-            }
+            appendLog("Ciclo " + nextCycle + ": ciclo global ejecutado en "
+                    + simulation.getComputers().size() + " computadores ("
+                    + (logEvent ? "manual" : "automático") + ").");
             updateMonitor();
         } else if (kernel != null) {
             long nextCycle = kernel.getCurrentCycle() + 1;
             kernel.executeCycle(nextCycle);
-            if (logEvent) {
-                appendLog("Ciclo " + nextCycle + ": Ciclo de reloj ejecutado.");
-            }
+            appendLog("Ciclo " + nextCycle + ": ciclo ejecutado ("
+                    + (logEvent ? "manual" : "automático") + ").");
             updateMonitor();
         }
     }
@@ -315,12 +350,17 @@ public class MonitorPanel extends JPanel {
         automaticCycleTimer.start();
         btnStart.setEnabled(false);
         btnPause.setEnabled(true);
+        appendLog("Avance automático iniciado; intervalo: " + getCycleDurationMs() + " ms.");
     }
 
     public void pauseAutomaticAdvancement() {
+        boolean wasRunning = automaticCycleTimer.isRunning();
         automaticCycleTimer.stop();
         btnStart.setEnabled(true);
         btnPause.setEnabled(false);
+        if (wasRunning) {
+            appendLog("Avance automático pausado en el ciclo " + getCurrentCycle() + ".");
+        }
     }
 
     public boolean isAutomaticAdvancementRunning() {
@@ -335,6 +375,83 @@ public class MonitorPanel extends JPanel {
         return simulation == null
                 ? kernel.getComputer().getClock().getCycleDurationMs()
                 : simulation.getCycleDurationMs();
+    }
+
+    private long getCurrentCycle() {
+        return simulation == null ? kernel.getCurrentCycle() : simulation.getCurrentCycle();
+    }
+
+    private void confirmReset() {
+        if (resetHandler == null) {
+            return;
+        }
+        int choice = JOptionPane.showConfirmDialog(this,
+                "Se volverá a cargar el último escenario JSON. Se perderán los cambios hechos en las tablas, "
+                        + "los ciclos avanzados, el contenido de los buffers y las métricas actuales. ¿Continuar?",
+                "Reiniciar escenario", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (choice == JOptionPane.YES_OPTION) {
+            pauseAutomaticAdvancement();
+            resetHandler.run();
+        }
+    }
+
+    private void registerEventListeners() {
+        int computerCount = simulation == null ? 1 : simulation.getComputers().size();
+        long processCount = 0;
+        if (simulation == null) {
+            registerEventListener(kernel);
+            processCount = countProcesses(kernel);
+        } else {
+            for (Computer computer : simulation.getComputers()) {
+                Kernel computerKernel = computer.getKernel();
+                registerEventListener(computerKernel);
+                processCount += countProcesses(computerKernel);
+            }
+        }
+
+        int bufferCount = simulation == null || simulation.getSyncManager() == null
+                ? 0 : simulation.getSyncManager().getAllBuffers().size();
+        appendLog("Monitor listo: " + computerCount + " computador(es), " + processCount
+                + " proceso(s), " + bufferCount + " buffer(es); ciclo de "
+                + getCycleDurationMs() + " ms.");
+    }
+
+    private void registerEventListener(Kernel targetKernel) {
+        int computerId = targetKernel.getComputer().getId();
+        targetKernel.addStateChangeListener(new StateChangeListener() {
+            @Override
+            public void onStateChange(PCB pcb, ProcessState oldState, ProcessState newState) {
+                appendLog("Nodo " + computerId + ": proceso " + pcb.getName()
+                        + " cambió de " + oldState + " a " + newState + ".");
+            }
+
+            @Override
+            public void onProcessCreated(PCB pcb) {
+                appendLog("Nodo " + computerId + ": proceso " + pcb.getName()
+                        + " (ID " + pcb.getId() + ") creado; estado " + pcb.getState() + ".");
+            }
+
+            @Override
+            public void onProcessTerminated(PCB pcb) {
+                appendLog("Nodo " + computerId + ": proceso " + pcb.getName()
+                        + " (ID " + pcb.getId() + ") terminó en ciclo "
+                        + targetKernel.getCurrentCycle() + ".");
+            }
+        });
+    }
+
+    private long countProcesses(Kernel targetKernel) {
+        long count = targetKernel.getNewQueue().size()
+                + targetKernel.getReadyQueue().size()
+                + targetKernel.getTerminatedQueue().size();
+        if (targetKernel.getComputer().getCpu().getCurrentProcess() != null) {
+            count++;
+        }
+        List<Queue<PCB>> blockedQueues = targetKernel.getAllBlockedQueues();
+        for (int i = 0; i < blockedQueues.size(); i++) {
+            count += blockedQueues.get(i).size();
+        }
+        return count;
     }
 
     private void selectComputer() {
@@ -424,12 +541,15 @@ public class MonitorPanel extends JPanel {
     }
 
     private void updateGlobalMetrics() {
-        double cpuUtilization = simulation == null
-                ? kernel.getCpuUtilization() : getGlobalCpuUtilization();
-        double throughput = simulation == null
-                ? kernel.getThroughput() : getGlobalThroughput();
-        lblCpuUtilization.setText(String.format("%.2f%%", cpuUtilization));
-        lblThroughput.setText(String.format("%.4f procesos/ciclo", throughput));
+        MetricsSnapshot metrics = simulation == null
+                ? kernel.getMetricsSnapshot() : simulation.getMetricsSnapshot();
+        lblCpuUtilization.setText(String.format("%.2f%%", metrics.cpuUtilization()));
+        lblThroughput.setText(String.format("%.4f proc/s", metrics.throughputPerSecond()));
+        lblAverageResponseTime.setText(String.format("%.2f ciclos", metrics.avgResponseTime()));
+        lblFairnessIndex.setText(String.format("%.3f", metrics.fairnessIndex()));
+        lblSemaphoreWait.setText(String.format("%.2f ciclos", metrics.avgSemaphoreBlockedCycles()));
+        lblProducedElements.setText(Long.toString(metrics.producedElements()));
+        lblConsumedElements.setText(Long.toString(metrics.consumedElements()));
     }
 
     private void updateCharts() {
@@ -558,8 +678,28 @@ public class MonitorPanel extends JPanel {
     }
 
     public void appendLog(String text) {
-        txtLog.append(text + "\n");
-        txtLog.setCaretPosition(txtLog.getDocument().getLength());
+        Runnable append = () -> {
+            txtLog.append(text + System.lineSeparator());
+            int excessLines = txtLog.getLineCount() - MAX_EVENT_LOG_LINES;
+            if (excessLines > 0) {
+                try {
+                    int endOfExcess = txtLog.getLineEndOffset(excessLines - 1);
+                    txtLog.getDocument().remove(0, endOfExcess);
+                } catch (javax.swing.text.BadLocationException ex) {
+                    throw new IllegalStateException("No se pudo limitar el registro de eventos.", ex);
+                }
+            }
+            txtLog.setCaretPosition(txtLog.getDocument().getLength());
+        };
+        if (SwingUtilities.isEventDispatchThread()) {
+            append.run();
+        } else {
+            SwingUtilities.invokeLater(append);
+        }
+    }
+
+    String getEventLogText() {
+        return txtLog.getText();
     }
 
     public void exportToPng(File file) throws IOException {
@@ -601,9 +741,11 @@ public class MonitorPanel extends JPanel {
         appendCsvRow(csv, "General", "0", "Política", kernel.getScheduler().getPolicy().getType());
         appendCsvRow(csv, "Métricas", "0", "Utilización CPU (%)", kernel.getCpuUtilization());
         appendCsvRow(csv, "Métricas", "0", "Throughput (procesos/ciclo)", kernel.getThroughput());
+        appendMetricsToCsv(csv, "Métricas", kernel.getMetricsSnapshot());
         if (simulation != null) {
             appendCsvRow(csv, "Métricas globales", "0", "Utilización CPU (%)", getGlobalCpuUtilization());
             appendCsvRow(csv, "Métricas globales", "0", "Throughput (procesos/ciclo)", getGlobalThroughput());
+            appendMetricsToCsv(csv, "Métricas globales", simulation.getMetricsSnapshot());
         }
         appendChartDataToCsv(csv);
         appendCsvRow(csv, "CPU", "0", "Proceso en ejecución",
@@ -642,12 +784,36 @@ public class MonitorPanel extends JPanel {
                 .append("</p><p>Utilización CPU: ")
                 .append(String.format("%.2f%%", kernel.getCpuUtilization()))
                 .append(" · Throughput: ")
-                .append(String.format("%.4f procesos/ciclo", kernel.getThroughput()));
+                .append(String.format("%.4f procesos/ciclo", kernel.getThroughput()))
+                .append(" · Throughput por segundo: ")
+                .append(String.format("%.4f procesos/s", kernel.getThroughputPerSecond()))
+                .append(" · Respuesta promedio: ")
+                .append(String.format("%.2f ciclos", kernel.getMetricsCollector().getAverageResponseTime()))
+                .append(" · Equidad de Jain: ")
+                .append(String.format("%.3f", kernel.getMetricsCollector().getFairnessIndex()))
+                .append(" · Espera promedio de semáforo: ")
+                .append(String.format("%.2f ciclos",
+                        kernel.getMetricsCollector().getAverageSemaphoreBlockedCycles()))
+                .append(" · Producidos/consumidos: ")
+                .append(kernel.getMetricsCollector().getProducedElements()).append("/")
+                .append(kernel.getMetricsCollector().getConsumedElements());
         if (simulation != null) {
+            MetricsSnapshot metrics = simulation.getMetricsSnapshot();
             html.append("</p><p>Métricas globales — CPU: ")
-                    .append(String.format("%.2f%%", getGlobalCpuUtilization()))
+                    .append(String.format("%.2f%%", metrics.cpuUtilization()))
                     .append(" · Throughput: ")
-                    .append(String.format("%.4f procesos/ciclo", getGlobalThroughput()));
+                    .append(String.format("%.4f procesos/ciclo", getGlobalThroughput()))
+                    .append(" · Throughput por segundo: ")
+                    .append(String.format("%.4f procesos/s", metrics.throughputPerSecond()))
+                    .append(" · Respuesta promedio: ")
+                    .append(String.format("%.2f ciclos", metrics.avgResponseTime()))
+                    .append(" · Equidad de Jain: ")
+                    .append(String.format("%.3f", metrics.fairnessIndex()))
+                    .append(" · Espera promedio de semáforo: ")
+                    .append(String.format("%.2f ciclos", metrics.avgSemaphoreBlockedCycles()))
+                    .append(" · Producidos/consumidos: ")
+                    .append(metrics.producedElements()).append("/")
+                    .append(metrics.consumedElements());
         }
         html.append("</p><p>Memoria: ")
                 .append(kernel.getComputer().getRam().getUsedSize() / BYTES_PER_MB)
@@ -674,6 +840,17 @@ public class MonitorPanel extends JPanel {
             appendCsvRow(csv, "Gráfico procesos", item + 1, processStateDataset.getKey(item),
                     processStateDataset.getValue(item));
         }
+    }
+
+    private static void appendMetricsToCsv(StringBuilder csv, String section, MetricsSnapshot metrics) {
+        appendCsvRow(csv, section, "0", "Throughput (procesos/s)", metrics.throughputPerSecond());
+        appendCsvRow(csv, section, "0", "Tiempo de respuesta promedio (ciclos)", metrics.avgResponseTime());
+        appendCsvRow(csv, section, "0", "Índice de equidad de Jain", metrics.fairnessIndex());
+        appendCsvRow(csv, section, "0", "Espera promedio de semáforo (ciclos)",
+                metrics.avgSemaphoreBlockedCycles());
+        appendCsvRow(csv, section, "0", "Elementos producidos", metrics.producedElements());
+        appendCsvRow(csv, section, "0", "Elementos consumidos", metrics.consumedElements());
+        appendCsvRow(csv, section, "0", "Cumplimiento de plazos", metrics.deadlineCompliance());
     }
 
     private void appendChartDataToHtml(StringBuilder html) {

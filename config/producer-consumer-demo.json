@@ -1,0 +1,51 @@
+{
+  "cycleDurationMs": 100,
+  "networkLatencyCycles": 2,
+  "computers": [
+    {
+      "id": 0,
+      "ramSizeMB": 512,
+      "initialPolicy": "FCFS",
+      "quantum": 2
+    },
+    {
+      "id": 1,
+      "ramSizeMB": 512,
+      "initialPolicy": "FCFS",
+      "quantum": 2
+    }
+  ],
+  "processes": [
+    {
+      "name": "LocalConsumer",
+      "instructions": 10,
+      "memoryRequired": 16,
+      "priority": 1,
+      "deadline": 0,
+      "type": "CONSUMER",
+      "computerId": 0,
+      "bufferId": "shared",
+      "produceConsumeInterval": 1,
+      "elementsRequired": 1
+    },
+    {
+      "name": "RemoteProducer",
+      "instructions": 10,
+      "memoryRequired": 16,
+      "priority": 1,
+      "deadline": 0,
+      "type": "PRODUCER",
+      "computerId": 1,
+      "bufferId": "shared",
+      "produceConsumeInterval": 1,
+      "elementsRequired": 1
+    }
+  ],
+  "buffers": [
+    {
+      "id": "shared",
+      "capacity": 2,
+      "hostComputerId": 0
+    }
+  ]
+}

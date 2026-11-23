@@ -26,7 +26,8 @@ public class Buffer {
     //  1 = Recurso de conteo adquirido, procediendo a mutex y sección crítica
     private final AssociativeList<Long, Integer> activePuts;
     private final AssociativeList<Long, Integer> activeGets;
-    private final Object bufferLock = new Object();
+    private final java.util.concurrent.Semaphore bufferLock =
+            new java.util.concurrent.Semaphore(1, true);
 
     public Buffer(String id, int capacity, int hostComputerId, Consumer<PCB> onUnblockCallback, int networkLatencyCycles) {
         this.id = id;
@@ -58,7 +59,8 @@ public class Buffer {
     }
 
     public boolean put(PCB producer, Object item) throws InterruptedException {
-        synchronized (bufferLock) {
+        bufferLock.acquire();
+        try {
             boolean isRemote = producer.getComputerId() != hostComputerId;
             Integer stage = activePuts.get(producer.getId());
 
@@ -109,11 +111,14 @@ public class Buffer {
             semFull.signal();
 
             return true;
+        } finally {
+            bufferLock.release();
         }
     }
 
     public Object get(PCB consumer) throws InterruptedException {
-        synchronized (bufferLock) {
+        bufferLock.acquire();
+        try {
             boolean isRemote = consumer.getComputerId() != hostComputerId;
             Integer stage = activeGets.get(consumer.getId());
 
@@ -164,6 +169,8 @@ public class Buffer {
             semEmpty.signal();
 
             return item;
+        } finally {
+            bufferLock.release();
         }
     }
 
@@ -180,8 +187,11 @@ public class Buffer {
     }
 
     public int getCurrentSize() {
-        synchronized (bufferLock) {
+        bufferLock.acquireUninterruptibly();
+        try {
             return elements.size();
+        } finally {
+            bufferLock.release();
         }
     }
 
@@ -202,24 +212,33 @@ public class Buffer {
     }
 
     public boolean isFull() {
-        synchronized (bufferLock) {
+        bufferLock.acquireUninterruptibly();
+        try {
             return elements.size() >= capacity;
+        } finally {
+            bufferLock.release();
         }
     }
 
     public boolean isEmpty() {
-        synchronized (bufferLock) {
+        bufferLock.acquireUninterruptibly();
+        try {
             return elements.isEmpty();
+        } finally {
+            bufferLock.release();
         }
     }
 
     public void cancelProcess(PCB process) {
-        synchronized (bufferLock) {
+        bufferLock.acquireUninterruptibly();
+        try {
             activePuts.remove(process.getId());
             activeGets.remove(process.getId());
             semEmpty.cancelWait(process);
             semFull.cancelWait(process);
             semMutex.cancelWait(process);
+        } finally {
+            bufferLock.release();
         }
     }
 
@@ -229,10 +248,13 @@ public class Buffer {
 
     @Override
     public String toString() {
-        synchronized (bufferLock) {
+        bufferLock.acquireUninterruptibly();
+        try {
             return String.format("Buffer{id='%s', size=%d/%d, host=%d, empty=%d, full=%d, mutex=%d}",
                     id, elements.size(), capacity, hostComputerId,
                     semEmpty.getValue(), semFull.getValue(), semMutex.getValue());
+        } finally {
+            bufferLock.release();
         }
     }
 }

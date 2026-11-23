@@ -41,7 +41,7 @@ docs/                    plan y arquitectura
 
 - [x] Fundación, hardware, kernel, planificación y sincronización.
 - [x] Configuración global y por computador; simulación distribuida con buffers compartidos.
-- [x] Monitor con comparación gráfica de CPU por computador y distribución de procesos por estado; métricas globales y persistencia JSON validada.
+- [x] Monitor con comparación gráfica de CPU por computador y distribución de procesos por estado; métricas por nodo y globales de throughput temporal, respuesta, equidad, sincronización y productividad.
 - [x] Exportación del dashboard a PNG, CSV y HTML.
 
 Desde **Archivo → Exportar Monitor** se puede guardar la vista actual como PNG,
@@ -54,10 +54,24 @@ los computadores y permite consultar sus colas, CPU y RAM de forma individual.
 o detienen el avance automático según la duración configurada. La carga de JSON
 reconstruye la configuración de los computadores, procesos y buffers; no guarda
 un punto de control de una simulación ya iniciada.
+Al iniciar se carga `config/default-simulation.json` para mostrar computadores,
+procesos y buffers de ejemplo. Desde **Archivo → Cargar Configuración (JSON)...**
+se puede reemplazar por otro escenario.
+En **Configuración**, selecciona una o varias filas de procesos o buffers y
+pulsa **Eliminar seleccionados** para quitarlos de la simulación. No se puede
+eliminar un buffer que todavía usa algún proceso. **Reiniciar escenario**, en
+el monitor, vuelve a cargar el último JSON abierto y descarta ciclos, buffers,
+métricas y cambios hechos manualmente desde la interfaz.
 
 Para estudiar la arquitectura, preparar una defensa y seguir pruebas manuales,
 consulta la [Guía de defensa y pruebas](./GUIA_DEFENSA_Y_PRUEBAS.md).
+La versión breve para exponer está en [Guía rápida de defensa (PDF)](./docs/GUIA_RAPIDA_DEFENSA.pdf),
+con versiones editables en [Word](./docs/GUIA_RAPIDA_DEFENSA.docx) y
+[Markdown](./docs/GUIA_RAPIDA_DEFENSA.md).
 La estructura real de componentes se describe en [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
+El [informe del Proyecto 1 (PDF)](./docs/INFORME_PROYECTO_1.pdf) resume el diseño,
+los diagramas UML, las pruebas y el cumplimiento del enunciado. La versión
+editable es [INFORME_PROYECTO_1.docx](./docs/INFORME_PROYECTO_1.docx).
 
 ## Convención de trabajo
 

@@ -28,11 +28,12 @@ configuración hasta el resultado:
 4. El kernel admite los procesos que caben en memoria; los demás esperan en la
    cola de procesos nuevos.
 5. El planificador elige un proceso listo para usar la CPU.
-6. Cada ciclo ejecuta instrucciones, revisa plazos y atiende procesos
-   bloqueados.
-7. Los procesos productores y consumidores usan un buffer. Los semáforos
-   coordinan el acceso y evitan que dos operaciones entren a la sección crítica
-   al mismo tiempo.
+6. El clúster asigna cada ciclo a todos los computadores mediante hilos de Java
+   y espera a que terminen antes de actualizar la vista. Cada kernel ejecuta
+   instrucciones, revisa plazos y atiende procesos bloqueados.
+7. Los procesos productores y consumidores usan un buffer. Los semáforos del
+   modelo coordinan espacio y elementos; un `java.util.concurrent.Semaphore`
+   protege el buffer compartido entre hilos.
 8. El monitor presenta CPU, memoria, colas, buffers y métricas. Incluye una
    comparación de utilización acumulada de CPU por computador y un gráfico de
    procesos por estado para el computador seleccionado. La configuración
@@ -66,7 +67,11 @@ paso sin depender de una espera en tiempo real.
 | **Mutex** | Semáforo usado para permitir que solo una operación a la vez modifique el contenido del buffer. |
 | **Latencia de red** | Número de ciclos de espera cuando el computador del proceso no es el host del buffer. |
 | **Utilización de CPU** | Porcentaje de ciclos en que la CPU ejecutó al menos una instrucción: `ciclos ocupados / ciclos observados × 100`. |
-| **Throughput** | Procesos completados por ciclo global: `procesos terminados / ciclos transcurridos`. Es una medida acumulada durante la simulación. |
+| **Throughput** | Procesos completados por segundo simulado: `procesos completados / (ciclos × duración del ciclo en segundos)`. |
+| **Tiempo de respuesta** | Promedio de ciclos entre el envío del proceso al kernel y el primer ciclo en que usa CPU; se incluyen los procesos que ya recibieron CPU. |
+| **Equidad de CPU** | Índice de Jain sobre los ciclos de CPU recibidos por todos los procesos enviados al computador, incluidos los que todavía tienen cero ciclos: `(Σx)² / (n × Σx²)`. Va de 0 a 1. |
+| **Espera de semáforo** | Promedio de ciclos por episodio de bloqueo en semáforo. La latencia de red se contabiliza aparte y no se suma aquí. |
+| **Productor/consumidor** | Totales de inserciones y extracciones que realmente se completaron en los buffers del nodo o del clúster. |
 | **Persistencia JSON** | Guardar y reconstruir la configuración desde un archivo de texto JSON. No es una base de datos ni un checkpoint de ejecución. |
 | **Memoria de proceso** | Se configura en MB y se convierte a bytes para contabilizar la RAM del computador. |
 
@@ -149,26 +154,29 @@ la ejecución distribuida, la latencia y la sincronización.
 
 ### Preparación
 
-1. Inicia la aplicación con `mvn exec:java`.
-2. Abre **Archivo → Cargar Configuración (JSON)...**.
-3. Selecciona `config/default-simulation.json` desde la raíz del repositorio.
-4. Cambia a la pestaña **Computadores / Global** y verifica que aparecen los
+1. Inicia la aplicación con `mvn exec:java`. Al abrir, se carga
+   `config/default-simulation.json`; en **Procesos** y **Buffers /
+   Sincronización** deben aparecer los datos del escenario.
+2. Cambia a la pestaña **Computadores / Global** y verifica que aparecen los
    computadores `0` y `1`, con RAM de `1024 MB` y `2048 MB` respectivamente.
-5. Comprueba que la duración global está en `100 ms` y la latencia de red en
+3. Comprueba que la duración global está en `500 ms` y la latencia de red en
    `2 ciclos`.
-6. Revisa los procesos y buffers en la pestaña de configuración. El buffer
+4. Revisa los procesos y buffers en la pestaña de configuración. El buffer
    `buf_alpha` está alojado en el computador `0`; `ConsumerA` pertenece al
    computador `1`, por lo que su acceso es remoto.
 
 ### Ejecución paso a paso
 
-1. Ve a la pestaña **Monitor**.
+1. Ve a la pestaña **Monitor**. El **Registro de eventos**, visible debajo de
+   las métricas, confirma la carga del escenario y registra ciclos manuales y
+   automáticos, además de procesos creados y terminados.
 2. Selecciona el computador `0` en el control **Computador**. Observa proceso en
    CPU, memoria y colas de ese nodo.
 3. Pulsa **Avanzar ciclo** varias veces. El número de ciclo global debe
-   aumentar y ambos computadores avanzan en cada paso. También puedes pulsar
-   **Iniciar** para que el timer avance según el intervalo configurado; pulsa
-   **Pausar** antes de continuar con la inspección manual.
+   aumentar y ambos computadores avanzan en cada paso. El escenario inicial
+   avanza automáticamente a aproximadamente dos ciclos por segundo. También
+   puedes ajustar la duración en **Computadores / Global**; pulsa **Iniciar**
+   para ejecutar y **Pausar** antes de continuar con la inspección manual.
 4. Cambia la selección al computador `1`. Su CPU, RAM y colas son las de ese
    computador, no una copia del nodo `0`.
 5. Revisa los buffers y el log. El consumidor remoto puede quedar bloqueado por
@@ -176,17 +184,33 @@ la ejecución distribuida, la latencia y la sincronización.
    espera. Los productores y consumidores también pueden bloquearse si el
    buffer está lleno o vacío.
 6. En **Computadores / Global**, compara ciclos ejecutados, utilización de CPU
-   y throughput. En **Monitor**, consulta el gráfico de utilización acumulada
-   de CPU para comparar los computadores y el gráfico circular para ver los
-   estados del nodo seleccionado. Al principio el throughput puede ser `0`;
-   aumenta cuando se completan procesos. Los gráficos muestran el estado y las
-   métricas acumuladas actuales; no representan una serie histórica por ciclo.
+   y las métricas por nodo. En **Monitor**, consulta throughput global en
+   procesos/segundo simulado, respuesta promedio, equidad, espera de semáforo y
+   elementos producidos/consumidos. El gráfico de barras compara utilización
+   acumulada de CPU y el gráfico circular muestra los estados del nodo
+   seleccionado. Algunas métricas empiezan en `0` porque aún no hay muestras o
+   procesos completados; los gráficos no representan una serie histórica.
 7. Usa **Archivo → Exportar Monitor** y prueba CSV o HTML. Abre el archivo para
    comprobar que incluye el ciclo, colas y métricas.
 8. Usa **Archivo → Guardar Configuración (JSON)...**. Carga ese archivo y
    verifica que se conservan ambos computadores, sus políticas, procesos y
    buffers. La carga crea una nueva simulación desde esa configuración; no
    restaura el ciclo ni el estado de ejecución.
+
+### Reiniciar una demostración
+
+Para repetir el escenario completo, pulsa **Reiniciar escenario** en el
+Monitor y confirma. Se recarga el último JSON abierto, reemplazando procesos,
+colas, buffers, ciclo y métricas. Los cambios hechos desde la interfaz se
+descartan. Para cambiar a otro escenario, usa primero **Archivo → Cargar
+Configuración (JSON)...** y selecciona `config/default-simulation.json` o
+`config/producer-consumer-demo.json`.
+
+En las tablas **Procesos** y **Buffers / Sincronización**, selecciona una o más
+filas y pulsa **Eliminar seleccionados**. Un buffer no se elimina mientras
+haya un proceso (incluso uno terminado) que lo tenga asociado; elimina primero
+ese proceso. El JSON guarda la configuración, no un punto de control de
+ejecución.
 
 Los valores exactos de las colas dependen del número de ciclos que avances. Para
 comparar resultados, carga de nuevo el JSON antes de repetir la demostración y
@@ -250,7 +274,10 @@ Entre otras cosas, las pruebas comprueban:
 - serialización y validación del JSON;
 - la asignación de procesos al computador indicado;
 - la ejecución de todos los computadores en un ciclo global;
+- la ejecución de los kernels en hilos distintos y el acceso protegido al
+  buffer compartido mediante semáforos de Java;
 - el desbloqueo en el kernel dueño del proceso;
+- el cálculo de respuesta, equidad, throughput temporal y espera semafórica;
 - el guardado y la carga de configuraciones multi-computador;
 - la exportación del monitor a PNG, CSV y HTML, incluyendo escaping de valores.
 
@@ -312,8 +339,15 @@ proceso ceda CPU, mientras siga ejecutándose.
 
 **¿Qué significa throughput?**
 
-Cuántos procesos terminan por ciclo global observado. Es rendimiento de la
-simulación, no instrucciones por segundo de un computador real.
+Cuántos procesos terminan por segundo simulado. Se calcula usando el número de
+ciclos y la duración configurada de cada ciclo; no es tiempo de pared ni una
+medición de una computadora real.
+
+**¿Cómo empiezo de nuevo una prueba?**
+
+Carga otra vez el JSON inicial desde el menú **Archivo**. No se recomienda
+reiniciar solo las filas de procesos, porque buffers, colas, ciclos y métricas
+deben reiniciarse juntos para que la comparación sea válida.
 
 **¿Qué se guarda en el JSON?**
 
