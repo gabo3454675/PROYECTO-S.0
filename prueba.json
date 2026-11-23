@@ -1,0 +1,43 @@
+{
+  "cycleDurationMs" : 1000,
+  "networkLatencyCycles" : 3,
+  "computers" : [ {
+    "id" : 0,
+    "ramSizeMB" : 1024,
+    "initialPolicy" : "EDF",
+    "quantum" : 2
+  }, {
+    "id" : 1,
+    "ramSizeMB" : 1024,
+    "initialPolicy" : "FCFS",
+    "quantum" : 2
+  } ],
+  "processes" : [ {
+    "name" : "Proc_1",
+    "instructions" : 12,
+    "memoryRequired" : 64,
+    "priority" : 1,
+    "deadline" : 30,
+    "type" : "CPU_BOUND",
+    "computerId" : 0,
+    "bufferId" : null,
+    "produceConsumeInterval" : 0,
+    "elementsRequired" : 0
+  }, {
+    "name" : "Proc_2",
+    "instructions" : 17,
+    "memoryRequired" : 128,
+    "priority" : 2,
+    "deadline" : 15,
+    "type" : "CPU_BOUND",
+    "computerId" : 1,
+    "bufferId" : null,
+    "produceConsumeInterval" : 0,
+    "elementsRequired" : 0
+  } ],
+  "buffers" : [ {
+    "id" : "buf_1",
+    "capacity" : 5,
+    "hostComputerId" : 0
+  } ]
+}
