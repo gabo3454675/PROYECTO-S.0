@@ -68,12 +68,12 @@ paralelo cuando exista lo que necesitan (ver *Depende de* en cada bloque).
 
 **Depende de:** Bloques 1 y 2.
 
-- [ ] PCB con operación (`IOOperationType`) y ruta del archivo
+- [x] PCB con operación (`IOOperationType`) y ruta del archivo
 - [ ] La interfaz solo crea el proceso; el CRUD lo ejecuta el proceso, nunca la ventana
-- [ ] Al obtener la CPU, el proceso genera la solicitud y pasa a Bloqueado (motivo E/S)
-- [ ] El disco atiende y el proceso vuelve a Listo
-- [ ] Cada operación sobre el disco cuenta como instrucción en modo sistema operativo
-- [ ] Las políticas de CPU del Proyecto 1 siguen funcionando
+- [x] Al obtener la CPU, el proceso genera la solicitud y pasa a Bloqueado (motivo E/S)
+- [x] El disco atiende y el proceso vuelve a Listo
+- [x] Cada operación sobre el disco cuenta como instrucción en modo sistema operativo
+- [x] Las políticas de CPU del Proyecto 1 siguen funcionando
 
 ## Bloque 4 - Suspensión y planificador a mediano plazo
 
