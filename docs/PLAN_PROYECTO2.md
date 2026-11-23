@@ -12,8 +12,8 @@ Disco simulado, planificación de disco y suspensión de procesos.
 |---|--------|------|-------------|--------|
 | 0 | Organización y limpieza | `chore/limpieza-p1` | | Pendiente |
 | 1 | Disco aislado | `feat/disk` | Gabriel | En progreso |
-| 2 | Sistema de archivos | `feat/filesystem` | | Pendiente |
-| 3 | Procesos de E/S | `feat/io-processes` | | Pendiente |
+| 2 | Sistema de archivos | `feat/filesystem` | Kelvin | Completada |
+| 3 | Procesos de E/S | `feat/io-processes` | Kelvin | En progreso |
 | 4 | Suspensión (mediano plazo) | `feat/swap` | | Pendiente |
 | 5 | Modo administrador / usuario | `feat/user-mode` | | Pendiente |
 | 6 | Interfaz gráfica | `feat/gui-p2` | | Pendiente |
