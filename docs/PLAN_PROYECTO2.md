@@ -55,14 +55,14 @@ paralelo cuando exista lo que necesitan (ver *Depende de* en cada bloque).
 
 **Depende de:** Bloque 1 (`DiskBlockMap`).
 
-- [ ] Árbol propio de directorios y archivos (sin colecciones de Java)
-- [ ] Cada archivo: nombre, tamaño en bloques, dueño, permiso (público/privado), primer bloque
-- [ ] Crear archivo (falla si no hay bloques libres) y directorio
-- [ ] Renombrar archivo/directorio (update)
-- [ ] Eliminar archivo libera sus bloques; eliminar directorio borra todo su contenido
-- [ ] Resolver rutas tipo `/sistema/boot.bin`
-- [ ] Proteger el sistema de archivos con semáforo
-- [ ] Tests de CRUD sobre el disco
+- [x] Árbol propio de directorios y archivos (sin colecciones de Java)
+- [x] Cada archivo: nombre, tamaño en bloques, dueño, permiso (público/privado), primer bloque
+- [x] Crear archivo (falla si no hay bloques libres) y directorio
+- [x] Renombrar archivo/directorio (update)
+- [x] Eliminar archivo libera sus bloques; eliminar directorio borra todo su contenido
+- [x] Resolver rutas tipo `/sistema/boot.bin`
+- [x] Proteger el sistema de archivos con semáforo
+- [x] Tests de CRUD sobre el disco
 
 ## Bloque 3 - Procesos de E/S
 
