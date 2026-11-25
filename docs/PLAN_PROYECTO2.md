@@ -12,8 +12,8 @@ Disco simulado, planificación de disco y suspensión de procesos.
 |---|--------|------|-------------|--------|
 | 0 | Organización y limpieza | `chore/limpieza-p1` | | Pendiente |
 | 1 | Disco aislado | `feat/disk` | Gabriel | En progreso |
-| 2 | Sistema de archivos | `feat/filesystem` | | Pendiente |
-| 3 | Procesos de E/S | `feat/io-processes` | | Pendiente |
+| 2 | Sistema de archivos | `feat/filesystem` | Kelvin | Completada |
+| 3 | Procesos de E/S | `feat/io-processes` | Kelvin | En progreso |
 | 4 | Suspensión (mediano plazo) | `feat/swap` | | Pendiente |
 | 5 | Modo administrador / usuario | `feat/user-mode` | | Pendiente |
 | 6 | Interfaz gráfica | `feat/gui-p2` | | Pendiente |
@@ -55,25 +55,25 @@ paralelo cuando exista lo que necesitan (ver *Depende de* en cada bloque).
 
 **Depende de:** Bloque 1 (`DiskBlockMap`).
 
-- [ ] Árbol propio de directorios y archivos (sin colecciones de Java)
-- [ ] Cada archivo: nombre, tamaño en bloques, dueño, permiso (público/privado), primer bloque
-- [ ] Crear archivo (falla si no hay bloques libres) y directorio
-- [ ] Renombrar archivo/directorio (update)
-- [ ] Eliminar archivo libera sus bloques; eliminar directorio borra todo su contenido
-- [ ] Resolver rutas tipo `/sistema/boot.bin`
-- [ ] Proteger el sistema de archivos con semáforo
-- [ ] Tests de CRUD sobre el disco
+- [x] Árbol propio de directorios y archivos (sin colecciones de Java)
+- [x] Cada archivo: nombre, tamaño en bloques, dueño, permiso (público/privado), primer bloque
+- [x] Crear archivo (falla si no hay bloques libres) y directorio
+- [x] Renombrar archivo/directorio (update)
+- [x] Eliminar archivo libera sus bloques; eliminar directorio borra todo su contenido
+- [x] Resolver rutas tipo `/sistema/boot.bin`
+- [x] Proteger el sistema de archivos con semáforo
+- [x] Tests de CRUD sobre el disco
 
 ## Bloque 3 - Procesos de E/S
 
 **Depende de:** Bloques 1 y 2.
 
-- [ ] PCB con operación (`IOOperationType`) y ruta del archivo
+- [x] PCB con operación (`IOOperationType`) y ruta del archivo
 - [ ] La interfaz solo crea el proceso; el CRUD lo ejecuta el proceso, nunca la ventana
-- [ ] Al obtener la CPU, el proceso genera la solicitud y pasa a Bloqueado (motivo E/S)
-- [ ] El disco atiende y el proceso vuelve a Listo
-- [ ] Cada operación sobre el disco cuenta como instrucción en modo sistema operativo
-- [ ] Las políticas de CPU del Proyecto 1 siguen funcionando
+- [x] Al obtener la CPU, el proceso genera la solicitud y pasa a Bloqueado (motivo E/S)
+- [x] El disco atiende y el proceso vuelve a Listo
+- [x] Cada operación sobre el disco cuenta como instrucción en modo sistema operativo
+- [x] Las políticas de CPU del Proyecto 1 siguen funcionando
 
 ## Bloque 4 - Suspensión y planificador a mediano plazo
 

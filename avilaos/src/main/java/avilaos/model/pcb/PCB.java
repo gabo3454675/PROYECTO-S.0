@@ -1,9 +1,10 @@
 package avilaos.model.pcb;
 
+import avilaos.model.enumeration.BlockReason;
+import avilaos.model.enumeration.ExecutionMode;
+import avilaos.model.enumeration.IOOperationType;
 import avilaos.model.enumeration.ProcessState;
 import avilaos.model.enumeration.ProcessType;
-import avilaos.model.enumeration.ExecutionMode;
-import avilaos.model.enumeration.BlockReason;
 import avilaos.util.IDGenerator;
 
 public final class PCB {
@@ -26,15 +27,44 @@ public final class PCB {
     private final int elementsRequired;
     private int elementsProcessed;
 
+    // Metadatos para procesos de E/S sobre el sistema de archivos (Bloque 3)
+    private final IOOperationType ioOperation;
+    private final String targetPath;
+    private final int fileSizeInBlocks;
+    private final String fileOwner;
+    private final boolean filePublic;
+    private final String newFileName;
+    private boolean ioRequestSubmitted;
+    private boolean ioRequestCompleted;
+    private String ioErrorMessage;
+
     public PCB(String name, int computerId, ProcessType type, int priority,
                long memoryRequired, long deadline, long remainingTime) {
         this(name, computerId, type, priority, memoryRequired, deadline, remainingTime,
-                null, 0, 0);
+                null, 0, 0, null, null, 0, "system", true, null);
     }
 
     public PCB(String name, int computerId, ProcessType type, int priority,
                long memoryRequired, long deadline, long remainingTime, String bufferId,
                int produceConsumeInterval, int elementsRequired) {
+        this(name, computerId, type, priority, memoryRequired, deadline, remainingTime,
+                bufferId, produceConsumeInterval, elementsRequired,
+                null, null, 0, "system", true, null);
+    }
+
+    public PCB(String name, int computerId, ProcessType type, int priority,
+               long memoryRequired, long deadline, long remainingTime,
+               IOOperationType ioOperation, String targetPath, int fileSizeInBlocks,
+               String fileOwner, boolean filePublic, String newFileName) {
+        this(name, computerId, type, priority, memoryRequired, deadline, remainingTime,
+                null, 0, 0, ioOperation, targetPath, fileSizeInBlocks, fileOwner, filePublic, newFileName);
+    }
+
+    private PCB(String name, int computerId, ProcessType type, int priority,
+                long memoryRequired, long deadline, long remainingTime,
+                String bufferId, int produceConsumeInterval, int elementsRequired,
+                IOOperationType ioOperation, String targetPath, int fileSizeInBlocks,
+                String fileOwner, boolean filePublic, String newFileName) {
         this.id = IDGenerator.getNextId();
         this.name = name;
         this.computerId = computerId;
@@ -53,6 +83,48 @@ public final class PCB {
         this.produceConsumeInterval = produceConsumeInterval;
         this.elementsRequired = elementsRequired;
         this.elementsProcessed = 0;
+
+        this.ioOperation = ioOperation;
+        this.targetPath = targetPath;
+        this.fileSizeInBlocks = fileSizeInBlocks;
+        this.fileOwner = fileOwner != null && !fileOwner.isBlank() ? fileOwner : "system";
+        this.filePublic = filePublic;
+        this.newFileName = newFileName;
+        this.ioRequestSubmitted = false;
+        this.ioRequestCompleted = false;
+        this.ioErrorMessage = null;
+    }
+
+    public static PCB forFileCreate(String processName, int computerId, int priority,
+                                    long memoryRequired, long deadline, long remainingTime,
+                                    String targetPath, int sizeInBlocks, String owner, boolean isPublic) {
+        return new PCB(processName, computerId, ProcessType.IO_BOUND, priority,
+                memoryRequired, deadline, Math.max(1, remainingTime),
+                IOOperationType.CREATE, targetPath, sizeInBlocks, owner, isPublic, null);
+    }
+
+    public static PCB forFileRead(String processName, int computerId, int priority,
+                                  long memoryRequired, long deadline, long remainingTime,
+                                  String targetPath) {
+        return new PCB(processName, computerId, ProcessType.IO_BOUND, priority,
+                memoryRequired, deadline, Math.max(1, remainingTime),
+                IOOperationType.READ, targetPath, 0, "system", true, null);
+    }
+
+    public static PCB forFileUpdate(String processName, int computerId, int priority,
+                                    long memoryRequired, long deadline, long remainingTime,
+                                    String targetPath, String newName) {
+        return new PCB(processName, computerId, ProcessType.IO_BOUND, priority,
+                memoryRequired, deadline, Math.max(1, remainingTime),
+                IOOperationType.UPDATE, targetPath, 0, "system", true, newName);
+    }
+
+    public static PCB forFileDelete(String processName, int computerId, int priority,
+                                    long memoryRequired, long deadline, long remainingTime,
+                                    String targetPath) {
+        return new PCB(processName, computerId, ProcessType.IO_BOUND, priority,
+                memoryRequired, deadline, Math.max(1, remainingTime),
+                IOOperationType.DELETE, targetPath, 0, "system", true, null);
     }
 
     public long getId() {
@@ -177,6 +249,58 @@ public final class PCB {
 
     public void incrementElementsProcessed() {
         elementsProcessed++;
+    }
+
+    public IOOperationType getIoOperation() {
+        return ioOperation;
+    }
+
+    public String getTargetPath() {
+        return targetPath;
+    }
+
+    public int getFileSizeInBlocks() {
+        return fileSizeInBlocks;
+    }
+
+    public String getFileOwner() {
+        return fileOwner;
+    }
+
+    public boolean isFilePublic() {
+        return filePublic;
+    }
+
+    public String getNewFileName() {
+        return newFileName;
+    }
+
+    public boolean isIoRequestSubmitted() {
+        return ioRequestSubmitted;
+    }
+
+    public void markIoRequestSubmitted() {
+        this.ioRequestSubmitted = true;
+    }
+
+    public boolean isIoRequestCompleted() {
+        return ioRequestCompleted;
+    }
+
+    public void markIoRequestCompleted() {
+        this.ioRequestCompleted = true;
+    }
+
+    public String getIoErrorMessage() {
+        return ioErrorMessage;
+    }
+
+    public void setIoErrorMessage(String ioErrorMessage) {
+        this.ioErrorMessage = ioErrorMessage;
+    }
+
+    public boolean hasPendingIORequest() {
+        return ioOperation != null && !ioRequestSubmitted;
     }
 
     public boolean isDeadlineReached(long currentCycle) {

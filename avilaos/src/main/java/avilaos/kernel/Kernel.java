@@ -1,29 +1,32 @@
 package avilaos.kernel;
 
-import avilaos.core.hardware.Computer;
+import avilaos.core.filesystem.FileSystemManager;
 import avilaos.core.hardware.CPU;
-import avilaos.kernel.scheduler.Scheduler;
-import avilaos.kernel.scheduler.FCFSFPolicy;
-import avilaos.kernel.scheduler.RoundRobinPolicy;
+import avilaos.core.hardware.Computer;
+import avilaos.kernel.disk.DiskScheduler;
+import avilaos.kernel.disk.IOProcessManager;
+import avilaos.kernel.memory.MemoryManager;
+import avilaos.kernel.process.ProcessManager;
 import avilaos.kernel.scheduler.EDFPolicy;
+import avilaos.kernel.scheduler.FCFSFPolicy;
 import avilaos.kernel.scheduler.PriorityPreemptivePolicy;
+import avilaos.kernel.scheduler.RoundRobinPolicy;
+import avilaos.kernel.scheduler.Scheduler;
+import avilaos.kernel.sync.SyncManager;
 import avilaos.metrics.MetricsCollector;
 import avilaos.metrics.MetricsSnapshot;
-import avilaos.model.interfaces.SchedulingPolicy;
-import avilaos.model.interfaces.MetricsListener;
-import avilaos.model.interfaces.StateChangeListener;
-import avilaos.kernel.memory.MemoryManager;
-import avilaos.kernel.sync.SyncManager;
-import avilaos.kernel.process.ProcessManager;
-import avilaos.model.pcb.PCB;
-import avilaos.model.enumeration.ProcessState;
-import avilaos.model.enumeration.SchedulingPolicyType;
 import avilaos.model.enumeration.BlockReason;
+import avilaos.model.enumeration.ProcessState;
 import avilaos.model.enumeration.ProcessType;
-import avilaos.util.datastructures.Queue;
+import avilaos.model.enumeration.SchedulingPolicyType;
+import avilaos.model.interfaces.MetricsListener;
+import avilaos.model.interfaces.SchedulingPolicy;
+import avilaos.model.interfaces.StateChangeListener;
+import avilaos.model.pcb.PCB;
+import avilaos.util.datastructures.LinkedList;
 import avilaos.util.datastructures.LinkedQueue;
 import avilaos.util.datastructures.List;
-import avilaos.util.datastructures.LinkedList;
+import avilaos.util.datastructures.Queue;
 
 public class Kernel {
     private final Computer computer;
@@ -38,6 +41,8 @@ public class Kernel {
     private final List<StateChangeListener> stateListeners;
     private final List<MetricsListener> metricsListeners;
     private final MetricsCollector metricsCollector;
+
+    private IOProcessManager ioProcessManager;
 
     private long currentCycle;
     private long cyclesExecuted;
@@ -83,6 +88,22 @@ public class Kernel {
         this.currentCycle = 0;
         this.cyclesExecuted = 0;
         this.busyCycles = 0;
+    }
+
+    /**
+     * Conecta el subsistema de E/S (planificador de disco + sistema de archivos)
+     * con este kernel para atender procesos {@link ProcessType#IO_BOUND}.
+     */
+    public void attachIOSubsystem(DiskScheduler diskScheduler, FileSystemManager fileSystemManager) {
+        this.ioProcessManager = new IOProcessManager(diskScheduler, fileSystemManager);
+    }
+
+    public void setIoProcessManager(IOProcessManager ioProcessManager) {
+        this.ioProcessManager = ioProcessManager;
+    }
+
+    public IOProcessManager getIoProcessManager() {
+        return ioProcessManager;
     }
 
     private avilaos.model.interfaces.SchedulingPolicy createPolicy(SchedulingPolicyType type, int quantum) {
@@ -198,6 +219,15 @@ public class Kernel {
     }
 
     private void handleRunningProcess(PCB pcb) {
+        if (ioProcessManager != null && pcb.hasPendingIORequest()) {
+            ioProcessManager.submitFromCpu(pcb, cpu, currentCycle);
+            if (pcb.getState() == ProcessState.BLOCKED) {
+                cpu.contextSwitch(null);
+                addToBlockedQueue(pcb);
+                return;
+            }
+        }
+
         if (pcb.getState() == ProcessState.RUNNING && pcb.getRemainingTime() > 0) {
             runSynchronizationOperation(pcb);
         }
@@ -353,6 +383,10 @@ public class Kernel {
         return false;
     }
 
+    public PCB findProcessById(long processId) {
+        return findProcess(processId);
+    }
+
     private PCB findProcess(long processId) {
         for (PCB process : getTrackedProcesses()) {
             if (process.getId() == processId) {
@@ -450,6 +484,20 @@ public class Kernel {
         }
     }
 
+    /**
+     * Desbloquea un proceso que completó su E/S y ya no tiene instrucciones
+     * pendientes en CPU, finalizándolo directamente sin reencolarlo en READY.
+     */
+    public void unblockAndTerminate(PCB pcb, boolean completed) {
+        if (pcb == null || isTerminated(pcb)) return;
+        for (int i = 0; i < blockedQueues.size(); i++) {
+            blockedQueues.get(i).remove(pcb);
+        }
+        pcb.setBlockReason(null);
+        pcb.setState(ProcessState.TERMINATED);
+        terminateProcess(pcb, completed);
+    }
+
     public void terminateProcess(PCB pcb) {
         terminateProcess(pcb, false);
     }
@@ -544,8 +592,7 @@ public class Kernel {
     }
 
     public double getThroughputPerSecond() {
-        double simulatedSeconds = cyclesExecuted
-                * computer.getClock().getCycleDurationMs() / 1000.0;
+        double simulatedSeconds = cyclesExecuted * computer.getClock().getCycleDurationMs() / 1000.0;
         return simulatedSeconds == 0 ? 0 : metricsCollector.getSuccessfulCompletions() / simulatedSeconds;
     }
 
