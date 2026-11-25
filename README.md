@@ -39,6 +39,12 @@ docs/                    plan y arquitectura
 
 ## Estado del proyecto
 
+Para probar la carga del Proyecto 2, abre **Archivo → Cargar Proyecto 2 (dos JSON)...**
+y selecciona primero `config/project2-disk-demo.json` y luego
+`config/project2-processes-demo.json`. Los procesos de E/S avanzan con el reloj
+del computador. El tamaño de swap se lee y valida, pero su reserva y la vista
+gráfica del disco siguen pendientes.
+
 - [x] Fundación, hardware, kernel, planificación y sincronización.
 - [x] Configuración global y por computador; simulación distribuida con buffers compartidos.
 - [x] Monitor con comparación gráfica de CPU por computador y distribución de procesos por estado; métricas por nodo y globales de throughput temporal, respuesta, equidad, sincronización y productividad.

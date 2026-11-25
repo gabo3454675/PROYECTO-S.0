@@ -1,0 +1,13 @@
+{
+  "diskConfig": {
+    "totalBlocks": 200,
+    "initialHead": 50,
+    "positionsPerCycle": 10
+  },
+  "fileSystem": [
+    {"path": "/sistema", "type": "DIRECTORY", "owner": "admin", "permissions": "public"},
+    {"path": "/usuarios", "type": "DIRECTORY", "owner": "admin", "permissions": "public"},
+    {"path": "/sistema/boot.bin", "type": "FILE", "startBlock": 11, "blocks": 8, "owner": "admin", "permissions": "public"},
+    {"path": "/usuarios/notas.txt", "type": "FILE", "startBlock": 34, "blocks": 4, "owner": "user1", "permissions": "private"}
+  ]
+}

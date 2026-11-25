@@ -30,6 +30,7 @@ public final class SimulationCluster {
     private final Semaphore cycleLifecycleLock = new Semaphore(1, true);
     private long currentCycle;
     private volatile boolean advancingCycle;
+    private int configuredSwapSizeBlocks;
 
     public SimulationCluster() {
         this.currentCycle = 0;
@@ -78,6 +79,15 @@ public final class SimulationCluster {
 
     public long getCurrentCycle() {
         return currentCycle;
+    }
+
+    public int getConfiguredSwapSizeBlocks() {
+        return configuredSwapSizeBlocks;
+    }
+
+    public void setConfiguredSwapSizeBlocks(int blocks) {
+        if (blocks < 0) throw new IllegalArgumentException("Swap inválido");
+        configuredSwapSizeBlocks = blocks;
     }
 
     public int getCycleDurationMs() {

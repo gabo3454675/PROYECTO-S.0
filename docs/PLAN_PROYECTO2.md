@@ -114,11 +114,11 @@ paralelo cuando exista lo que necesitan (ver *Depende de* en cada bloque).
 
 **Depende de:** Bloque 2 (sistema de archivos) y Bloque 3 (procesos).
 
-- [ ] Cargar el JSON del sistema de archivos (`diskConfig` + `fileSystem`)
+- [x] Cargar el JSON del sistema de archivos (`diskConfig` + `fileSystem`)
 - [ ] Guardar el estado del sistema de archivos en JSON
-- [ ] Cargar el JSON de procesos (`globalConfig` + `computer` + `processes`)
-- [ ] Exigir ambos JSON antes de iniciar el reloj
-- [ ] Configuración nueva: nº de bloques, tamaño del swap, política inicial, posición inicial del cabezal
+- [x] Cargar el JSON de procesos (`globalConfig` + `computer` + `processes`)
+- [x] Exigir ambos JSON al cargar un escenario del Proyecto 2
+- [ ] Configuración nueva: nº de bloques, reserva real del swap, política inicial, posición inicial del cabezal
 
 ## Bloque 8 - Métricas
 

@@ -1,0 +1,16 @@
+{
+  "globalConfig": {
+    "cycleDurationMs": 300,
+    "swapSizeBlocks": 20,
+    "initialDiskPolicy": "FIFO"
+  },
+  "computer": {
+    "ramCapacity": 1024,
+    "policy": "FCFS",
+    "quantum": 0
+  },
+  "processes": [
+    {"name": "LeerBoot", "memory": 16, "deadline": 500, "instructions": 3, "targetPath": "/sistema/boot.bin", "operation": "READ"},
+    {"name": "CrearResumen", "memory": 16, "deadline": 500, "instructions": 3, "targetPath": "/usuarios/resumen.txt", "operation": "CREATE", "blocks": 3, "owner": "user1", "permissions": "private"}
+  ]
+}

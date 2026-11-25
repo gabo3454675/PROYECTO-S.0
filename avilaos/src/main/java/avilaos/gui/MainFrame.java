@@ -1,6 +1,7 @@
 package avilaos.gui;
 
 import avilaos.config.ConfigManager;
+import avilaos.config.Project2ConfigLoader;
 import avilaos.model.enumeration.SchedulingPolicyType;
 import avilaos.simulation.SimulationCluster;
 
@@ -24,6 +25,8 @@ public class MainFrame extends JFrame {
     private ConfigPanel configPanel;
     private MonitorPanel monitorPanel;
     private Path activeConfigPath = Path.of("config", "default-simulation.json");
+    private Path activeDiskConfigPath;
+    private Path activeProcessConfigPath;
 
     public MainFrame() {
         simulation = createInitialSimulation();
@@ -104,6 +107,9 @@ public class MainFrame extends JFrame {
         JMenuItem loadItem = new JMenuItem("Cargar Configuración (JSON)...");
         loadItem.addActionListener(e -> loadConfiguration());
 
+        JMenuItem loadProject2Item = new JMenuItem("Cargar Proyecto 2 (dos JSON)...");
+        loadProject2Item.addActionListener(e -> loadProject2Configuration());
+
         JMenu exportMenu = new JMenu("Exportar Monitor");
         addExportItem(exportMenu, "PNG", "png");
         addExportItem(exportMenu, "CSV", "csv");
@@ -114,6 +120,7 @@ public class MainFrame extends JFrame {
 
         fileMenu.add(saveItem);
         fileMenu.add(loadItem);
+        fileMenu.add(loadProject2Item);
         fileMenu.add(exportMenu);
         fileMenu.addSeparator();
         fileMenu.add(exitItem);
@@ -190,6 +197,8 @@ public class MainFrame extends JFrame {
             simulation.shutdown();
             simulation = loaded;
             activeConfigPath = fileToLoad.toPath();
+            activeDiskConfigPath = null;
+            activeProcessConfigPath = null;
             buildTabs();
             pack();
             setSize(1280, 900);
@@ -200,15 +209,50 @@ public class MainFrame extends JFrame {
         }
     }
 
+    private void loadProject2Configuration() {
+        boolean resume = monitorPanel.isAutomaticAdvancementRunning();
+        monitorPanel.pauseAutomaticAdvancement();
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Seleccionar JSON del sistema de archivos");
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            if (resume) monitorPanel.startAutomaticAdvancement();
+            return;
+        }
+        Path diskPath = chooser.getSelectedFile().toPath();
+        chooser.setDialogTitle("Seleccionar JSON de procesos y configuración");
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            if (resume) monitorPanel.startAutomaticAdvancement();
+            return;
+        }
+        Path processPath = chooser.getSelectedFile().toPath();
+        try {
+            SimulationCluster loaded = Project2ConfigLoader.load(diskPath, processPath);
+            monitorPanel.dispose();
+            simulation.shutdown();
+            simulation = loaded;
+            activeDiskConfigPath = diskPath;
+            activeProcessConfigPath = processPath;
+            buildTabs();
+            setSize(1280, 900);
+            JOptionPane.showMessageDialog(this, "Proyecto 2 cargado. El disco avanzará con cada ciclo.");
+        } catch (IOException | RuntimeException ex) {
+            if (resume) monitorPanel.startAutomaticAdvancement();
+            JOptionPane.showMessageDialog(this, "No se pudo cargar el Proyecto 2:\n" + ex.getMessage(),
+                    "Error de carga", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
     private void resetScenario() {
         try {
-            SimulationCluster reset = ConfigManager.loadSimulationFromJson(activeConfigPath.toString());
+            SimulationCluster reset = activeDiskConfigPath == null
+                    ? ConfigManager.loadSimulationFromJson(activeConfigPath.toString())
+                    : Project2ConfigLoader.load(activeDiskConfigPath, activeProcessConfigPath);
             monitorPanel.dispose();
             simulation.shutdown();
             simulation = reset;
             buildTabs();
             JOptionPane.showMessageDialog(this,
-                    "Escenario restaurado desde:\n" + activeConfigPath.toAbsolutePath(),
+                    "Escenario restaurado.",
                     "Simulación reiniciada", JOptionPane.INFORMATION_MESSAGE);
         } catch (IOException | RuntimeException ex) {
             LOGGER.log(Level.SEVERE, "No se pudo reiniciar el escenario activo.", ex);
