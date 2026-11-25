@@ -45,9 +45,9 @@ paralelo cuando exista lo que necesitan (ver *Depende de* en cada bloque).
 - [x] Políticas FIFO, SSTF, SCAN, C-SCAN verificadas con el anexo y casos P1–P4 (`feat/disk`)
 - [x] `DiskScheduler`: cola única de E/S protegida, cambio de política en caliente (`feat/disk`)
 - [x] PR `feat/disk` → `develop` (PR #10, fusionado)
-- [ ] `Disk` (hardware) implementa `ClockListener`: avanza un ciclo por tick, el cabezal recorre
+- [x] `Disk` (hardware) implementa `ClockListener`: avanza un ciclo por tick, el cabezal recorre
       N posiciones por ciclo (configurable) y cada bloque leído/escrito cuesta un ciclo
-- [ ] Al terminar una solicitud, el disco avisa para despertar al proceso
+- [x] Al terminar una solicitud, el disco avisa para despertar al proceso
 - [ ] Área de swap de tamaño configurable (según la decisión del Bloque 0)
 - [ ] (Opcional) LOOK / C-LOOK
 
