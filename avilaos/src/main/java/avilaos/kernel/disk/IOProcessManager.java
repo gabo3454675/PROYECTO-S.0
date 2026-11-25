@@ -84,6 +84,9 @@ public class IOProcessManager {
         }
 
         PCB pcb = kernel.findProcessById(request.getProcessId());
+        if (pcb == null || kernel.isProcessTerminated(pcb)) {
+            return;
+        }
         String error = executeFileSystemOperation(request, pcb);
 
         if (pcb != null) {
@@ -127,7 +130,8 @@ public class IOProcessManager {
                     int lastSlash = path != null ? path.lastIndexOf('/') : -1;
                     String parentPath = lastSlash > 0 ? path.substring(0, lastSlash) : "/";
                     String fileName = lastSlash >= 0 ? path.substring(lastSlash + 1) : path;
-                    fileSystemManager.createFile(parentPath, fileName, blocks, owner, isPublic, "#4A90E2");
+                    fileSystemManager.createFile(parentPath, fileName, blocks, owner, isPublic,
+                            Long.toString(pcb.getId()));
                 }
                 case READ -> {
                     FileSystemNode node = fileSystemManager.resolve(path);

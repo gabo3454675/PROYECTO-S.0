@@ -39,6 +39,10 @@ public class DiskBlock {
         this.next = next;
     }
 
+    void setOwnerId(String ownerId) {
+        this.ownerId = ownerId;
+    }
+
     void clear() {
         this.usage = BlockUsage.FREE;
         this.ownerId = null;

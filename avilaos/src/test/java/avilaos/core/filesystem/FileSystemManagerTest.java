@@ -90,4 +90,22 @@ class FileSystemManagerTest {
         List<FileSystemNode> allFiles = fs.getAllFiles();
         assertEquals(2, allFiles.size());
     }
+
+    @Test
+    void invalidFileNameDoesNotConsumeBlocks() {
+        assertThrows(IllegalArgumentException.class,
+                () -> fs.createFile("/", "bad/name", 3, "admin", true, "P1"));
+        assertEquals(100, blockMap.getFreeCount());
+        assertEquals(0, fs.getAllFiles().size());
+    }
+
+    @Test
+    void renamingDirectoryUpdatesBlockOwnershipOfDescendants() {
+        fs.createDirectory("/", "old", "admin", true);
+        FileSystemNode file = fs.createFile("/old", "report.txt", 3, "admin", true, "P1");
+        fs.rename("/old", "new");
+        for (Integer index : blockMap.getChain(file.getFirstBlock())) {
+            assertEquals("/new/report.txt", blockMap.getBlock(index).getOwnerId());
+        }
+    }
 }

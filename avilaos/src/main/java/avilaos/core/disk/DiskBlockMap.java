@@ -112,6 +112,21 @@ public class DiskBlockMap {
         }
     }
 
+    /** Actualiza la ruta asociada a todos los bloques de un archivo renombrado. */
+    public void renameOwner(int firstBlock, String ownerId) {
+        checkIndex(firstBlock);
+        lock();
+        try {
+            int current = firstBlock;
+            while (current != DiskBlock.NO_NEXT && !blocks[current].isFree()) {
+                blocks[current].setOwnerId(ownerId);
+                current = blocks[current].getNext();
+            }
+        } finally {
+            mutex.release();
+        }
+    }
+
     /** Índices de la cadena de bloques que empieza en {@code firstBlock}, en orden. */
     public List<Integer> getChain(int firstBlock) {
         checkIndex(firstBlock);

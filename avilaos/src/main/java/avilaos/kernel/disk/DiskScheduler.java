@@ -75,6 +75,20 @@ public class DiskScheduler {
         }
     }
 
+    public void cancelProcess(long processId) {
+        mutex.acquireUninterruptibly();
+        try {
+            DiskRequest[] snapshot = pending.toArray(new DiskRequest[0]);
+            for (DiskRequest request : snapshot) {
+                if (request.getProcessId() == processId) {
+                    pending.remove(request);
+                }
+            }
+        } finally {
+            mutex.release();
+        }
+    }
+
     public void setPolicy(DiskPolicyType type) {
         setPolicy(DiskPolicyFactory.create(type));
     }

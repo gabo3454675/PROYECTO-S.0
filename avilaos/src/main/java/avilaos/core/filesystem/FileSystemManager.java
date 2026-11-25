@@ -89,6 +89,9 @@ public class FileSystemManager {
         lock();
         try {
             FileSystemNode parent = requireDirectory(parentPath);
+            // Validar antes de reservar bloques para no dejar espacio ocupado al fallar.
+            new FileSystemNode(fileName, false, sizeInBlocks, owner, publicAccess,
+                    DiskBlock.NO_NEXT, creatorProcessId, null);
             if (parent.findChild(fileName) != null) {
                 throw new IllegalArgumentException("Ya existe un elemento llamado '" + fileName + "' en " + parentPath);
             }
@@ -125,6 +128,7 @@ public class FileSystemManager {
                 throw new IllegalArgumentException("Ya existe '" + newName + "' en " + parent.getPath());
             }
             target.setName(newName);
+            refreshBlockOwners(target);
             return target;
         } finally {
             mutex.release();
@@ -250,6 +254,16 @@ public class FileSystemManager {
         }
         for (FileSystemNode child : current.getChildren()) {
             collectFiles(child, accumulator);
+        }
+    }
+
+    private void refreshBlockOwners(FileSystemNode node) {
+        if (!node.isDirectory()) {
+            blockMap.renameOwner(node.getFirstBlock(), node.getPath());
+            return;
+        }
+        for (FileSystemNode child : node.getChildren()) {
+            refreshBlockOwners(child);
         }
     }
 

@@ -73,6 +73,7 @@ class IOProcessIntegrationTest {
         assertNotNull(created);
         assertEquals(3, created.getSizeInBlocks());
         assertEquals("kelvin", created.getOwner());
+        assertEquals(Long.toString(creator.getId()), created.getCreatorProcessId());
         assertEquals(ProcessState.READY, creator.getState());
         assertEquals(ExecutionMode.USER, creator.getMode());
         assertNull(creator.getIoErrorMessage());
@@ -140,5 +141,27 @@ class IOProcessIntegrationTest {
         assertNotNull(tooLarge.getIoErrorMessage());
         assertEquals(ProcessState.TERMINATED, tooLarge.getState());
         assertNull(fsManager.resolve("/docs/gigante.iso"));
+    }
+
+    @Test
+    void expiredProcessCannotCreateFileFromQueuedOrDispatchedRequest() {
+        PCB expired = PCB.forFileCreate("expired", 1, 1, 32, 2, 2,
+                "/docs/late.txt", 1, "admin", true);
+        kernel.submitProcess(expired);
+        kernel.executeCycle(1);
+        DiskRequest dispatched = diskScheduler.dispatch(0, HeadDirection.UP, 100).request();
+        kernel.executeCycle(2);
+        kernel.getIoProcessManager().completeDiskRequest(dispatched, kernel);
+        assertNull(fsManager.resolve("/docs/late.txt"));
+        assertEquals(ProcessState.TERMINATED, expired.getState());
+
+        PCB queued = PCB.forFileCreate("queued", 1, 1, 32, 4, 2,
+                "/docs/queued.txt", 1, "admin", true);
+        kernel.submitProcess(queued);
+        kernel.executeCycle(3);
+        assertEquals(1, diskScheduler.getPendingCount());
+        kernel.executeCycle(4);
+        assertEquals(0, diskScheduler.getPendingCount());
+        assertNull(fsManager.resolve("/docs/queued.txt"));
     }
 }

@@ -504,6 +504,9 @@ public class Kernel {
 
     private void terminateProcess(PCB pcb, boolean completed) {
         if (isTerminated(pcb)) return;
+        if (ioProcessManager != null) {
+            ioProcessManager.getDiskScheduler().cancelProcess(pcb.getId());
+        }
         metricsCollector.recordTermination(pcb, currentCycle, completed);
         if (cpu.getCurrentProcess() == pcb) {
             cpu.contextSwitch(null);
@@ -526,6 +529,10 @@ public class Kernel {
             }
         }
         return false;
+    }
+
+    public boolean isProcessTerminated(PCB pcb) {
+        return pcb != null && isTerminated(pcb);
     }
 
     public void changeSchedulingPolicy(SchedulingPolicyType type, int quantum) {
