@@ -91,10 +91,10 @@ paralelo cuando exista lo que necesitan (ver *Depende de* en cada bloque).
 
 **Depende de:** Bloque 2.
 
-- [ ] Selector de modo en la interfaz
-- [ ] Admin: todas las operaciones
-- [ ] Usuario: leer archivos propios o públicos; crear solo en sus directorios
-- [ ] Rechazar operaciones no permitidas explicando el motivo, sin detener la simulación
+- [x] Selector de modo en la interfaz
+- [x] Admin: todas las operaciones
+- [x] Usuario: leer archivos propios o públicos; crear solo en sus directorios
+- [x] Rechazar operaciones no permitidas explicando el motivo, sin detener la simulación
 
 ## Bloque 6 - Interfaz gráfica
 
