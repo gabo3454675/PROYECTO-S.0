@@ -8,12 +8,13 @@ import avilaos.metrics.MetricsCollector;
 import avilaos.metrics.MetricsSnapshot;
 import avilaos.model.dto.ComputerConfig;
 import avilaos.model.dto.SimulationConfig;
-import avilaos.model.enumeration.SchedulingPolicyType;
 import avilaos.model.enumeration.ProcessType;
+import avilaos.model.enumeration.SchedulingPolicyType;
+import avilaos.model.enumeration.UserMode;
 import avilaos.model.pcb.PCB;
 import avilaos.util.datastructures.LinkedList;
-import avilaos.util.datastructures.List;
 import avilaos.util.datastructures.LinkedQueue;
+import avilaos.util.datastructures.List;
 import avilaos.util.datastructures.Queue;
 
 import java.util.concurrent.ExecutionException;
@@ -31,6 +32,8 @@ public final class SimulationCluster {
     private long currentCycle;
     private volatile boolean advancingCycle;
     private int configuredSwapSizeBlocks;
+    private UserMode userMode = UserMode.ADMIN;
+    private String activeUser = "user";
 
     public SimulationCluster() {
         this.currentCycle = 0;
@@ -39,6 +42,8 @@ public final class SimulationCluster {
     public SimulationCluster(Computer computer) {
         this();
         if (computer == null) throw new IllegalArgumentException("El computador no puede ser null.");
+        computer.getKernel().setUserMode(userMode);
+        computer.getKernel().setActiveUser(activeUser);
         computers.add(computer);
     }
 
@@ -49,6 +54,8 @@ public final class SimulationCluster {
         }
         Computer computer = new Computer(config.id(), config.ramSizeMB(), config.initialPolicy(),
                 config.quantum(), syncManager);
+        computer.getKernel().setUserMode(userMode);
+        computer.getKernel().setActiveUser(activeUser);
         computers.add(computer);
         return computer;
     }
@@ -104,6 +111,34 @@ public final class SimulationCluster {
 
     public void setNetworkLatencyCycles(int cycles) {
         syncManager.setNetworkLatencyCycles(cycles);
+    }
+
+    public UserMode getUserMode() {
+        return userMode;
+    }
+
+    public void setUserMode(UserMode userMode) {
+        if (userMode == null) {
+            throw new IllegalArgumentException("El modo de usuario no puede ser nulo.");
+        }
+        this.userMode = userMode;
+        for (Computer computer : computers) {
+            computer.getKernel().setUserMode(userMode);
+        }
+    }
+
+    public String getActiveUser() {
+        return activeUser;
+    }
+
+    public void setActiveUser(String activeUser) {
+        if (activeUser == null || activeUser.isBlank()) {
+            throw new IllegalArgumentException("El usuario activo no puede estar vacío.");
+        }
+        this.activeUser = activeUser.trim();
+        for (Computer computer : computers) {
+            computer.getKernel().setActiveUser(this.activeUser);
+        }
     }
 
     public void submitProcess(PCB process) {

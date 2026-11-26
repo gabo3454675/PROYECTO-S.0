@@ -13,6 +13,7 @@ import avilaos.model.enumeration.BlockReason;
 import avilaos.model.enumeration.ExecutionMode;
 import avilaos.model.enumeration.IOOperationType;
 import avilaos.model.enumeration.ProcessState;
+import avilaos.model.enumeration.UserMode;
 import avilaos.model.pcb.PCB;
 
 /**
@@ -71,9 +72,9 @@ public class IOProcessManager {
     }
 
     /**
-     * Completa una solicitud atendida por el disco: ejecuta la operación CRUD
-     * sobre el sistema de archivos, restaura modo {@link ExecutionMode#USER} y
-     * despierta al proceso en el {@link Kernel}.
+     * Completa una solicitud atendida por el disco: valida permisos según el modo activo,
+     * ejecuta la operación CRUD sobre el sistema de archivos, restaura modo {@link ExecutionMode#USER}
+     * y despierta al proceso en el {@link Kernel}.
      */
     public void completeDiskRequest(DiskRequest request, Kernel kernel) {
         if (request == null) {
@@ -87,17 +88,15 @@ public class IOProcessManager {
         if (pcb == null || kernel.isProcessTerminated(pcb)) {
             return;
         }
-        String error = executeFileSystemOperation(request, pcb);
+        String error = executeFileSystemOperation(request, pcb, kernel);
 
-        if (pcb != null) {
-            pcb.setIoErrorMessage(error);
-            pcb.markIoRequestCompleted();
-            pcb.setMode(ExecutionMode.USER);
-            if (pcb.isFinished() || pcb.getRemainingTime() <= 0) {
-                kernel.unblockAndTerminate(pcb, error == null);
-            } else {
-                kernel.unblockProcess(pcb);
-            }
+        pcb.setIoErrorMessage(error);
+        pcb.markIoRequestCompleted();
+        pcb.setMode(ExecutionMode.USER);
+        if (pcb.isFinished() || pcb.getRemainingTime() <= 0) {
+            kernel.unblockAndTerminate(pcb, error == null);
+        } else {
+            kernel.unblockProcess(pcb);
         }
     }
 
@@ -114,23 +113,40 @@ public class IOProcessManager {
         return Math.max(0, node.getFirstBlock());
     }
 
-    private String executeFileSystemOperation(DiskRequest request, PCB pcb) {
+    private String executeFileSystemOperation(DiskRequest request, PCB pcb, Kernel kernel) {
         IOOperationType op = request.getOperation();
         if (op == null || !op.isFileOperation()) {
             return null;
         }
 
+        UserMode mode = kernel.getUserMode();
+        String currentUser = kernel.getActiveUser();
         String path = request.getTargetPath();
+
         try {
             switch (op) {
                 case CREATE -> {
                     int blocks = pcb != null ? pcb.getFileSizeInBlocks() : 1;
-                    String owner = pcb != null ? pcb.getFileOwner() : "system";
+                    String requestedOwner = pcb != null ? pcb.getFileOwner() : null;
+                    String effectiveOwner = mode.isAdmin()
+                            ? (requestedOwner != null && !requestedOwner.isBlank() ? requestedOwner : "admin")
+                            : currentUser;
                     boolean isPublic = pcb == null || pcb.isFilePublic();
                     int lastSlash = path != null ? path.lastIndexOf('/') : -1;
                     String parentPath = lastSlash > 0 ? path.substring(0, lastSlash) : "/";
                     String fileName = lastSlash >= 0 ? path.substring(lastSlash + 1) : path;
-                    fileSystemManager.createFile(parentPath, fileName, blocks, owner, isPublic,
+
+                    FileSystemNode parentDir = fileSystemManager.resolve(parentPath);
+                    if (parentDir == null || !parentDir.isDirectory()) {
+                        throw new IllegalArgumentException("El directorio padre no existe: " + parentPath);
+                    }
+                    if (!mode.isAdmin() && !fileSystemManager.canModify(parentDir, mode, currentUser)) {
+                        throw new SecurityException("Permiso denegado en modo Usuario ('" + currentUser
+                                + "'): solo puede crear archivos en sus propios directorios (el directorio '"
+                                + parentPath + "' pertenece a '" + parentDir.getOwner() + "').");
+                    }
+
+                    fileSystemManager.createFile(parentPath, fileName, blocks, effectiveOwner, isPublic,
                             Long.toString(pcb.getId()));
                 }
                 case READ -> {
@@ -138,12 +154,34 @@ public class IOProcessManager {
                     if (node == null) {
                         throw new IllegalArgumentException("Ruta inexistente: " + path);
                     }
+                    if (!fileSystemManager.canRead(node, mode, currentUser)) {
+                        throw new SecurityException("Permiso denegado en modo Usuario ('" + currentUser
+                                + "'): el archivo '" + path + "' es privado y pertenece a '" + node.getOwner() + "'.");
+                    }
                 }
                 case UPDATE -> {
+                    FileSystemNode node = fileSystemManager.resolve(path);
+                    if (node == null) {
+                        throw new IllegalArgumentException("Ruta no encontrada: " + path);
+                    }
+                    if (!fileSystemManager.canModify(node, mode, currentUser)) {
+                        throw new SecurityException("Permiso denegado en modo Usuario ('" + currentUser
+                                + "'): no puede modificar '" + path + "' porque pertenece a '" + node.getOwner() + "'.");
+                    }
                     String newName = pcb != null ? pcb.getNewFileName() : null;
                     fileSystemManager.rename(path, newName);
                 }
-                case DELETE -> fileSystemManager.delete(path);
+                case DELETE -> {
+                    FileSystemNode node = fileSystemManager.resolve(path);
+                    if (node == null) {
+                        throw new IllegalArgumentException("Ruta no encontrada: " + path);
+                    }
+                    if (!fileSystemManager.canModify(node, mode, currentUser)) {
+                        throw new SecurityException("Permiso denegado en modo Usuario ('" + currentUser
+                                + "'): no puede eliminar '" + path + "' porque pertenece a '" + node.getOwner() + "'.");
+                    }
+                    fileSystemManager.delete(path);
+                }
                 default -> {
                 }
             }

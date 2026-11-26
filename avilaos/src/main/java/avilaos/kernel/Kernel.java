@@ -27,6 +27,7 @@ import avilaos.util.datastructures.LinkedList;
 import avilaos.util.datastructures.LinkedQueue;
 import avilaos.util.datastructures.List;
 import avilaos.util.datastructures.Queue;
+import avilaos.model.enumeration.UserMode;
 
 public class Kernel {
     private final Computer computer;
@@ -44,6 +45,8 @@ public class Kernel {
 
     private IOProcessManager ioProcessManager;
 
+    private UserMode userMode = UserMode.ADMIN;
+    private String activeUser = "user";
     private long currentCycle;
     private long cyclesExecuted;
     private long busyCycles;
@@ -102,8 +105,30 @@ public class Kernel {
         this.ioProcessManager = ioProcessManager;
     }
 
-    public IOProcessManager getIoProcessManager() {
+public IOProcessManager getIoProcessManager() {
         return ioProcessManager;
+    }
+
+    public UserMode getUserMode() {
+        return userMode;
+    }
+
+    public void setUserMode(UserMode userMode) {
+        if (userMode == null) {
+            throw new IllegalArgumentException("El modo de usuario no puede ser nulo.");
+        }
+        this.userMode = userMode;
+    }
+
+    public String getActiveUser() {
+        return activeUser;
+    }
+
+    public void setActiveUser(String activeUser) {
+        if (activeUser == null || activeUser.isBlank()) {
+            throw new IllegalArgumentException("El usuario activo no puede estar vacío.");
+        }
+        this.activeUser = activeUser.trim();
     }
 
     private avilaos.model.interfaces.SchedulingPolicy createPolicy(SchedulingPolicyType type, int quantum) {
