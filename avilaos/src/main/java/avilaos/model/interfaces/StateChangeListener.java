@@ -14,4 +14,7 @@ public interface StateChangeListener {
 
     default void onProcessRemoved(PCB pcb) {
     }
+
+    default void onSwapEvent(PCB pcb, String message) {
+    }
 }

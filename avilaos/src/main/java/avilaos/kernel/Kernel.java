@@ -28,6 +28,10 @@ import avilaos.util.datastructures.LinkedQueue;
 import avilaos.util.datastructures.List;
 import avilaos.util.datastructures.Queue;
 import avilaos.model.enumeration.UserMode;
+import avilaos.model.enumeration.IOOperationType;
+import avilaos.model.disk.DiskRequest;
+import avilaos.core.disk.DiskBlock;
+import avilaos.util.datastructures.AssociativeList;
 
 public class Kernel {
     private final Computer computer;
@@ -44,6 +48,10 @@ public class Kernel {
     private final MetricsCollector metricsCollector;
 
     private IOProcessManager ioProcessManager;
+    private final Queue<PCB> readySuspendedQueue = new LinkedQueue<>();
+    private final AssociativeList<Long, Integer> swapBlocks = new AssociativeList<>();
+    private final AssociativeList<Long, Boolean> swapPending = new AssociativeList<>();
+    private final AssociativeList<Long, Boolean> awakenedDuringSwap = new AssociativeList<>();
 
     private UserMode userMode = UserMode.ADMIN;
     private String activeUser = "user";
@@ -168,6 +176,7 @@ public IOProcessManager getIoProcessManager() {
         }
 
         handleBlockedProcesses();
+        manageSwap();
         cyclesExecuted++;
         if (cpu.getInstructionsExecutedThisCycle() > 0) {
             busyCycles++;
@@ -240,6 +249,12 @@ public IOProcessManager getIoProcessManager() {
             } else {
                 newQueue.enqueue(pcb);
             }
+        }
+        int suspendedSize = readySuspendedQueue.size();
+        for (int i = 0; i < suspendedSize; i++) {
+            PCB pcb = readySuspendedQueue.dequeue();
+            if (pcb.isDeadlineReached(currentCycle)) terminateProcess(pcb);
+            else readySuspendedQueue.enqueue(pcb);
         }
     }
 
@@ -340,10 +355,16 @@ public IOProcessManager getIoProcessManager() {
             int size = queue.size();
             for (int j = 0; j < size; j++) {
                 PCB pcb = queue.dequeue();
+                if (swapPending.containsKey(pcb.getId())) {
+                    queue.enqueue(pcb);
+                    continue;
+                }
                 if (shouldUnblock(pcb, BlockReason.values()[i])) {
-                    pcb.setState(ProcessState.READY);
+                    pcb.setState(pcb.getState() == ProcessState.BLOCKED_SUSPENDED
+                            ? ProcessState.READY_SUSPENDED : ProcessState.READY);
                     pcb.setBlockReason(null);
-                    scheduler.addToReady(pcb);
+                    if (pcb.getState() == ProcessState.READY_SUSPENDED) readySuspendedQueue.enqueue(pcb);
+                    else scheduler.addToReady(pcb);
                 } else {
                     queue.enqueue(pcb);
                 }
@@ -389,6 +410,8 @@ public IOProcessManager getIoProcessManager() {
             blockedQueues.get(i).remove(process);
         }
         terminatedQueue.remove(process);
+        readySuspendedQueue.remove(process);
+        releaseSwap(process);
         syncManager.cancelProcess(process);
         memoryManager.releaseProcess(process);
         metricsCollector.removeProcess(process);
@@ -431,6 +454,7 @@ public IOProcessManager getIoProcessManager() {
         for (Queue<PCB> queue : blockedQueues) {
             for (PCB process : queue) processes.add(process);
         }
+        for (PCB process : readySuspendedQueue) processes.add(process);
         return processes;
     }
 
@@ -492,11 +516,22 @@ public IOProcessManager getIoProcessManager() {
     public void unblockProcess(PCB pcb, long cycle) {
         if (pcb.getState() == ProcessState.TERMINATED || isTerminated(pcb)) return;
         metricsCollector.finishSemaphoreWait(pcb, cycle);
+        if (swapPending.containsKey(pcb.getId()) && pcb.getState() == ProcessState.BLOCKED) {
+            awakenedDuringSwap.put(pcb.getId(), true);
+            return;
+        }
         for (int i = 0; i < blockedQueues.size(); i++) {
             blockedQueues.get(i).remove(pcb);
         }
-        pcb.setState(ProcessState.READY);
+        boolean suspended = swapBlocks.containsKey(pcb.getId());
+        pcb.setState(suspended ? ProcessState.READY_SUSPENDED : ProcessState.READY);
         pcb.setBlockReason(null);
+        if (suspended) {
+            boolean queued = false;
+            for (PCB waiting : readySuspendedQueue) if (waiting == pcb) queued = true;
+            if (!queued) readySuspendedQueue.enqueue(pcb);
+            return;
+        }
         boolean alreadyReady = false;
         for (PCB ready : scheduler.getReadyQueue()) {
             if (ready == pcb) {
@@ -537,6 +572,8 @@ public IOProcessManager getIoProcessManager() {
             cpu.contextSwitch(null);
         }
         memoryManager.getNewQueue().remove(pcb);
+        readySuspendedQueue.remove(pcb);
+        releaseSwap(pcb);
         scheduler.removeFromReady(pcb);
         for (int i = 0; i < blockedQueues.size(); i++) {
             blockedQueues.get(i).remove(pcb);
@@ -588,6 +625,77 @@ public IOProcessManager getIoProcessManager() {
 
     public Queue<PCB> getNewQueue() {
         return memoryManager.getNewQueue();
+    }
+
+    public Queue<PCB> getReadySuspendedQueue() { return readySuspendedQueue; }
+
+    /** Suspende un bloqueado para dar paso a la cola de admisión; reactiva cuando hay RAM. */
+    private void manageSwap() {
+        if (ioProcessManager == null || computer.getDisk() == null
+                || ioProcessManager.getFileSystemManager().getBlockMap().getSwapCapacity() == 0) return;
+        PCB waiting = memoryManager.getNewQueue().isEmpty() ? null : memoryManager.getNewQueue().peek();
+        if (waiting != null && !memoryManager.canAdmit(waiting)) {
+            for (Queue<PCB> queue : blockedQueues) {
+                for (PCB candidate : queue) {
+                    if (candidate.getState() != ProcessState.BLOCKED
+                            || swapPending.containsKey(candidate.getId())) continue;
+                    long required = candidate.getMemoryRequired();
+                    if (required > Integer.MAX_VALUE) continue;
+                    int first = ioProcessManager.getFileSystemManager().getBlockMap()
+                            .allocateSwap(candidate.getId(), (int) required);
+                    if (first == DiskBlock.NO_NEXT) continue;
+                    swapBlocks.put(candidate.getId(), first);
+                    swapPending.put(candidate.getId(), true);
+                    ioProcessManager.getDiskScheduler().submit(new DiskRequest(candidate.getId(), candidate.getName(),
+                            IOOperationType.SUSPEND, null, first, currentCycle));
+                    for (StateChangeListener listener : stateListeners)
+                        listener.onSwapEvent(candidate, "Se suspende al proceso " + candidate.getName()
+                                + " para admitir a " + waiting.getName());
+                    return;
+                }
+            }
+        }
+        if (waiting != null) return;
+        for (PCB candidate : readySuspendedQueue) {
+            if (swapPending.containsKey(candidate.getId()) || !memoryManager.canAdmit(candidate)) continue;
+            memoryManager.reserveForResume(candidate);
+            swapPending.put(candidate.getId(), true);
+            ioProcessManager.getDiskScheduler().submit(new DiskRequest(candidate.getId(), candidate.getName(),
+                    IOOperationType.RESUME, null, swapBlocks.get(candidate.getId()), currentCycle));
+            return;
+        }
+    }
+
+    public void completeSwapRequest(DiskRequest request) {
+        PCB pcb = findProcessById(request.getProcessId());
+        if (pcb == null || isTerminated(pcb)) return;
+        swapPending.remove(pcb.getId());
+        if (request.getOperation() == IOOperationType.SUSPEND) {
+            memoryManager.suspendProcess(pcb);
+            if (awakenedDuringSwap.remove(pcb.getId()) != null) {
+                for (Queue<PCB> queue : blockedQueues) queue.remove(pcb);
+                pcb.setBlockReason(null);
+                pcb.setState(ProcessState.READY_SUSPENDED);
+                readySuspendedQueue.enqueue(pcb);
+            } else {
+                pcb.setState(ProcessState.BLOCKED_SUSPENDED);
+            }
+        } else if (request.getOperation() == IOOperationType.RESUME) {
+            releaseSwap(pcb);
+            readySuspendedQueue.remove(pcb);
+            pcb.setState(ProcessState.READY);
+            scheduler.addToReady(pcb);
+            for (StateChangeListener listener : stateListeners)
+                listener.onSwapEvent(pcb, "Se reactiva al proceso " + pcb.getName());
+        }
+    }
+
+    private void releaseSwap(PCB pcb) {
+        swapPending.remove(pcb.getId());
+        awakenedDuringSwap.remove(pcb.getId());
+        Integer first = swapBlocks.remove(pcb.getId());
+        if (first != null && ioProcessManager != null)
+            ioProcessManager.getFileSystemManager().getBlockMap().releaseSwap(first);
     }
 
     public Queue<PCB> getReadyQueue() {

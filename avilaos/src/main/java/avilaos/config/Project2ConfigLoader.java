@@ -88,7 +88,9 @@ public final class Project2ConfigLoader {
         }
         DiskPolicyType diskPolicy = DiskPolicyType.fromString(string(global, "initialDiskPolicy"));
 
-        FileSystemManager files = new FileSystemManager(new DiskBlockMap(totalBlocks));
+        DiskBlockMap blockMap = new DiskBlockMap(totalBlocks);
+        blockMap.reserveSwapArea(swapBlocks);
+        FileSystemManager files = new FileSystemManager(blockMap);
         loadFiles(fileSystem, files);
         SimulationCluster simulation = new SimulationCluster();
         try {

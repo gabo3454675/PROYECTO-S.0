@@ -89,6 +89,10 @@ public class IOProcessManager {
         if (pcb == null || kernel.isProcessTerminated(pcb)) {
             return;
         }
+        if (request.getOperation().isSwapOperation()) {
+            kernel.completeSwapRequest(request);
+            return;
+        }
         String error = executeFileSystemOperation(request, pcb);
 
         pcb.setIoErrorMessage(error);

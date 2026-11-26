@@ -22,6 +22,7 @@ public class DiskBlockMap {
     private final DiskBlock[] blocks;
     private final Semaphore mutex = new Semaphore(1, true);
     private int freeCount;
+    private int swapStart;
 
     public DiskBlockMap(int totalBlocks) {
         if (totalBlocks < MIN_TOTAL_BLOCKS || totalBlocks > MAX_TOTAL_BLOCKS) {
@@ -33,6 +34,58 @@ public class DiskBlockMap {
             blocks[i] = new DiskBlock(i);
         }
         this.freeCount = totalBlocks;
+        this.swapStart = totalBlocks;
+    }
+
+    /** Reserva los últimos bloques para swap antes de cargar archivos. */
+    public void reserveSwapArea(int count) {
+        if (count < 0 || count > blocks.length) throw new IllegalArgumentException("Tamaño de swap inválido");
+        lock();
+        try {
+            if (freeCount != blocks.length) throw new IllegalStateException("Reserve swap antes de crear archivos");
+            swapStart = blocks.length - count;
+            for (int i = swapStart; i < blocks.length; i++) blocks[i].assign(BlockUsage.SWAP, "SWAP_LIBRE");
+            freeCount -= count;
+        } finally { mutex.release(); }
+    }
+
+    public int getSwapCapacity() { return blocks.length - swapStart; }
+
+    public int allocateSwap(long processId, int count) {
+        if (count <= 0) throw new IllegalArgumentException("Swap requerido inválido");
+        lock();
+        try {
+            int available = 0;
+            for (int i = swapStart; i < blocks.length; i++)
+                if ("SWAP_LIBRE".equals(blocks[i].getOwnerId())) available++;
+            if (available < count) return DiskBlock.NO_NEXT;
+            int first = DiskBlock.NO_NEXT;
+            DiskBlock previous = null;
+            for (int i = swapStart; i < blocks.length && count > 0; i++) {
+                if (!"SWAP_LIBRE".equals(blocks[i].getOwnerId())) continue;
+                blocks[i].assign(BlockUsage.SWAP, Long.toString(processId));
+                if (previous == null) first = i;
+                else previous.setNext(i);
+                previous = blocks[i];
+                count--;
+            }
+            return first;
+        } finally { mutex.release(); }
+    }
+
+    public void releaseSwap(int firstBlock) {
+        if (firstBlock == DiskBlock.NO_NEXT) return;
+        lock();
+        try {
+            int current = firstBlock;
+            while (current != DiskBlock.NO_NEXT) {
+                if (current < swapStart || current >= blocks.length)
+                    throw new IllegalStateException("Cadena de swap inválida");
+                int next = blocks[current].getNext();
+                blocks[current].assign(BlockUsage.SWAP, "SWAP_LIBRE");
+                current = next;
+            }
+        } finally { mutex.release(); }
     }
 
     /**

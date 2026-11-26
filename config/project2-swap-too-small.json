@@ -1,0 +1,8 @@
+{
+  "globalConfig": {"cycleDurationMs": 100, "swapSizeBlocks": 8, "initialDiskPolicy": "FIFO"},
+  "computer": {"ramCapacity": 24, "policy": "FCFS", "quantum": 0},
+  "processes": [
+    {"name": "LecturaLarga", "memory": 16, "deadline": 500, "instructions": 3, "targetPath": "/docs/data.bin", "operation": "READ"},
+    {"name": "LecturaEnEspera", "memory": 16, "deadline": 500, "instructions": 1, "targetPath": "/docs/data.bin", "operation": "READ"}
+  ]
+}

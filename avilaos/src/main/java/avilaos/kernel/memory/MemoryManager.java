@@ -52,6 +52,19 @@ public class MemoryManager {
         pcb.setState(avilaos.model.enumeration.ProcessState.TERMINATED);
     }
 
+    public void suspendProcess(PCB pcb) {
+        if (allocatedProcesses.remove(pcb.getId()) != null) ram.free(getMemoryBytes(pcb));
+    }
+
+    public boolean reserveForResume(PCB pcb) {
+        long bytes = getMemoryBytes(pcb);
+        if (!ram.allocate(bytes)) return false;
+        allocatedProcesses.put(pcb.getId(), pcb);
+        return true;
+    }
+
+    public boolean canAdmit(PCB pcb) { return ram.canAllocate(getMemoryBytes(pcb)); }
+
     public void checkNewQueue(avilaos.kernel.scheduler.Scheduler scheduler) {
         int size = newQueue.size();
         for (int i = 0; i < size; i++) {

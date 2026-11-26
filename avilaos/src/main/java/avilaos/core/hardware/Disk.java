@@ -92,6 +92,10 @@ public final class Disk implements ClockListener {
 
     private int serviceBlocks(DiskRequest request) {
         IOOperationType operation = request.getOperation();
+        if (operation.isSwapOperation()) {
+            PCB pcb = kernel.findProcessById(request.getProcessId());
+            return pcb == null ? 1 : (int) Math.min(Integer.MAX_VALUE, Math.max(1, pcb.getMemoryRequired()));
+        }
         if (operation == IOOperationType.CREATE) {
             PCB pcb = kernel.findProcessById(request.getProcessId());
             return pcb == null ? 1 : Math.max(1, pcb.getFileSizeInBlocks());

@@ -1,0 +1,7 @@
+{
+  "diskConfig": {"totalBlocks": 100, "initialHead": 0, "positionsPerCycle": 10},
+  "fileSystem": [
+    {"path": "/docs", "type": "DIRECTORY", "owner": "admin", "permissions": "public"},
+    {"path": "/docs/data.bin", "type": "FILE", "startBlock": 5, "blocks": 20, "owner": "admin", "permissions": "public"}
+  ]
+}
