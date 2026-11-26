@@ -42,8 +42,14 @@ docs/                    plan y arquitectura
 Para probar la carga del Proyecto 2, abre **Archivo → Cargar Proyecto 2 (dos JSON)...**
 y selecciona primero `config/project2-disk-demo.json` y luego
 `config/project2-processes-demo.json`. Los procesos de E/S avanzan con el reloj
-del computador. El tamaño de swap se lee y valida, pero su reserva y la vista
-gráfica del disco siguen pendientes.
+del computador. El swap se reserva al final del disco (1 MB de proceso por bloque).
+Cuando la cola de admisión espera RAM, el planificador suspende el primer proceso
+bloqueado elegible mediante E/S y lo reactiva cuando se libera memoria. La vista
+gráfica del desplazamiento del cabezal sigue pendiente. Para repetir los casos de suspensión y sus
+límites, consulta [los escenarios JSON de swap](./docs/PRUEBAS_SWAP.md).
+La pestaña **Disco y archivos** muestra el árbol de archivos, los bloques,
+el cabezal y la cola de E/S; el monitor muestra las colas suspendidas y puede
+ocultar los mensajes repetitivos de cada ciclo.
 Desde **Archivo → Guardar disco Proyecto 2 (JSON)...** se exportan el cabezal,
 la velocidad y el árbol de archivos actuales para volver a cargarlos junto con
 el JSON de procesos. En el monitor, **Modo** y **Usuario** determinan los permisos

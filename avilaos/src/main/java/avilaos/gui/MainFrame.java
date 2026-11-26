@@ -24,6 +24,7 @@ public class MainFrame extends JFrame {
     private SimulationCluster simulation;
     private ConfigPanel configPanel;
     private MonitorPanel monitorPanel;
+    private Project2DiskPanel diskPanel;
     private Path activeConfigPath = Path.of("config", "default-simulation.json");
     private Path activeDiskConfigPath;
     private Path activeProcessConfigPath;
@@ -75,6 +76,7 @@ public class MainFrame extends JFrame {
     }
 
     private void buildTabs() {
+        if (diskPanel != null) diskPanel.dispose();
         JTabbedPane tabbedPane = new JTabbedPane();
 
         configPanel = new ConfigPanel(simulation);
@@ -82,6 +84,12 @@ public class MainFrame extends JFrame {
 
         tabbedPane.addTab("Configuración", configPanel);
         tabbedPane.addTab("Monitor", monitorPanel);
+        if (simulation.getComputers().size() == 1 && simulation.getComputers().get(0).getDisk() != null) {
+            diskPanel = new Project2DiskPanel(simulation.getComputers().get(0));
+            tabbedPane.addTab("Disco y archivos", diskPanel);
+        } else {
+            diskPanel = null;
+        }
 
         // Al cambiar a la pestaña de monitor, actualizar datos
         tabbedPane.addChangeListener(e -> {
@@ -89,6 +97,8 @@ public class MainFrame extends JFrame {
                 monitorPanel.updateMonitor();
             } else if (tabbedPane.getSelectedIndex() == 0) {
                 configPanel.refreshTables();
+            } else if (diskPanel != null) {
+                diskPanel.refresh();
             }
         });
 
@@ -218,6 +228,7 @@ public class MainFrame extends JFrame {
         try {
             SimulationCluster loaded = ConfigManager.loadSimulationFromJson(fileToLoad.getAbsolutePath());
             monitorPanel.dispose();
+            if (diskPanel != null) diskPanel.dispose();
             simulation.shutdown();
             simulation = loaded;
             activeConfigPath = fileToLoad.toPath();

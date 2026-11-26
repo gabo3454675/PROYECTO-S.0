@@ -80,6 +80,9 @@ public class MonitorPanel extends JPanel {
     private DefaultTableModel readyQueueModel;
     private DefaultTableModel blockedQueueModel;
     private DefaultTableModel termQueueModel;
+    private DefaultTableModel readySuspendedModel;
+    private DefaultTableModel blockedSuspendedModel;
+    private boolean showCycleEvents;
 
     // Modelo de Tabla de Buffers
     private DefaultTableModel buffersModel;
@@ -136,9 +139,9 @@ public class MonitorPanel extends JPanel {
         heading.add(title);
         heading.add(Box.createVerticalStrut(4));
         heading.add(subtitle);
-        headerPanel.add(heading, BorderLayout.WEST);
+        headerPanel.add(heading, BorderLayout.NORTH);
 
-        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 8));
+        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 8));
         topPanel.setBorder(BorderFactory.createTitledBorder("Controles"));
         lblCurrentCycle = new JLabel("Ciclo 0");
         lblCurrentCycle.setFont(new Font("Segoe UI", Font.BOLD, 15));
@@ -198,7 +201,7 @@ public class MonitorPanel extends JPanel {
         topPanel.add(btnStart);
         topPanel.add(btnPause);
         topPanel.add(btnReset);
-        headerPanel.add(topPanel, BorderLayout.EAST);
+        headerPanel.add(topPanel, BorderLayout.CENTER);
         add(headerPanel, BorderLayout.NORTH);
         automaticCycleTimer = new Timer(getCycleDurationMs(), e -> advanceCycle(false));
 
@@ -225,6 +228,10 @@ public class MonitorPanel extends JPanel {
 
         JPanel logPanel = createCard("Registro de eventos");
         logPanel.setLayout(new BorderLayout());
+        JCheckBox cycleEvents = new JCheckBox("Mostrar cada ciclo");
+        cycleEvents.setSelected(false);
+        cycleEvents.addActionListener(e -> showCycleEvents = cycleEvents.isSelected());
+        logPanel.add(cycleEvents, BorderLayout.NORTH);
         txtLog = new JTextArea(5, 50);
         txtLog.setEditable(false);
         txtLog.setFont(new Font("Consolas", Font.PLAIN, 12));
@@ -253,6 +260,8 @@ public class MonitorPanel extends JPanel {
         statePlot.setSectionPaint("Listo", new Color(251, 191, 36));
         statePlot.setSectionPaint("Ejecución", new Color(72, 187, 153));
         statePlot.setSectionPaint("Bloqueado", new Color(248, 113, 113));
+        statePlot.setSectionPaint("Listo/Suspendido", new Color(245, 158, 11));
+        statePlot.setSectionPaint("Bloqueado/Suspendido", new Color(239, 68, 68));
         statePlot.setSectionPaint("Terminado", new Color(167, 139, 250));
         statePlot.setLabelGenerator(new org.jfree.chart.labels.StandardPieSectionLabelGenerator("{0}: {1} ({2})"));
         chartsPanel.add(createChartCard(cpuChart));
@@ -292,12 +301,19 @@ public class MonitorPanel extends JPanel {
         readyQueueModel = new DefaultTableModel(new String[]{"ID", "Nombre", "Prioridad", "Restante"}, 0);
         blockedQueueModel = new DefaultTableModel(new String[]{"ID", "Nombre", "Motivo de Bloqueo"}, 0);
         termQueueModel = new DefaultTableModel(new String[]{"ID", "Nombre", "Estado"}, 0);
+        readySuspendedModel = new DefaultTableModel(new String[]{"ID", "Nombre", "Memoria (MB)"}, 0);
+        blockedSuspendedModel = new DefaultTableModel(new String[]{"ID", "Nombre", "Motivo"}, 0);
 
         queuesPanel.add(createTablePanel("Cola NEW", newQueueModel));
         queuesPanel.add(createTablePanel("Cola READY", readyQueueModel));
         queuesPanel.add(createTablePanel("Cola BLOCKED", blockedQueueModel));
         queuesPanel.add(createTablePanel("Cola TERMINATED", termQueueModel));
         dashboardContent.add(createCardWithContent("Colas de procesos", queuesPanel));
+        dashboardContent.add(Box.createVerticalStrut(14));
+        JPanel suspendedPanel = new JPanel(new GridLayout(1, 2, 12, 0));
+        suspendedPanel.add(createTablePanel("Listo / Suspendido", readySuspendedModel));
+        suspendedPanel.add(createTablePanel("Bloqueado / Suspendido", blockedSuspendedModel));
+        dashboardContent.add(createCardWithContent("Procesos en swap", suspendedPanel));
         dashboardContent.add(Box.createVerticalStrut(14));
 
         buffersModel = new DefaultTableModel(new String[]{"ID Buffer", "Host", "Ocupación", "Capacidad", "Bloqueados"}, 0);
@@ -359,14 +375,14 @@ public class MonitorPanel extends JPanel {
         if (simulation != null) {
             simulation.advanceCycle();
             long nextCycle = simulation.getCurrentCycle();
-            appendLog("Ciclo " + nextCycle + ": ciclo global ejecutado en "
+            if (logEvent || showCycleEvents) appendLog("Ciclo " + nextCycle + ": ciclo global ejecutado en "
                     + simulation.getComputers().size() + " computadores ("
                     + (logEvent ? "manual" : "automático") + ").");
             updateMonitor();
         } else if (kernel != null) {
             long nextCycle = kernel.getCurrentCycle() + 1;
             kernel.executeCycle(nextCycle);
-            appendLog("Ciclo " + nextCycle + ": ciclo ejecutado ("
+            if (logEvent || showCycleEvents) appendLog("Ciclo " + nextCycle + ": ciclo ejecutado ("
                     + (logEvent ? "manual" : "automático") + ").");
             updateMonitor();
         }
@@ -469,6 +485,11 @@ public class MonitorPanel extends JPanel {
                             + " (ID " + pcb.getId() + ") terminó en ciclo "
                             + targetKernel.getCurrentCycle() + ".");
                 }
+            }
+
+            @Override
+            public void onSwapEvent(PCB pcb, String message) {
+                appendLog("Nodo " + computerId + ": " + message + ".");
             }
         });
     }
@@ -602,6 +623,7 @@ public class MonitorPanel extends JPanel {
         refreshQueueTable(kernel.getNewQueue(), newQueueModel, true);
         refreshQueueTable(kernel.getReadyQueue(), readyQueueModel, false);
         refreshQueueTable(kernel.getTerminatedQueue(), termQueueModel, false);
+        refreshSuspendedTables();
         refreshBlockedQueuesTable();
 
         refreshBuffersTable();
@@ -635,6 +657,11 @@ public class MonitorPanel extends JPanel {
         setProcessStateValue("Listo", countQueue(kernel.getReadyQueue()));
         setProcessStateValue("Ejecución", kernel.getComputer().getCpu().getCurrentProcess() == null ? 0 : 1);
         setProcessStateValue("Bloqueado", countBlockedProcesses());
+        setProcessStateValue("Listo/Suspendido", countQueue(kernel.getReadySuspendedQueue()));
+        int blockedSuspended = 0;
+        for (Queue<PCB> queue : kernel.getAllBlockedQueues())
+            for (PCB pcb : queue) if (pcb.getState() == ProcessState.BLOCKED_SUSPENDED) blockedSuspended++;
+        setProcessStateValue("Bloqueado/Suspendido", blockedSuspended);
         setProcessStateValue("Terminado", countQueue(kernel.getTerminatedQueue()));
     }
 
@@ -654,7 +681,8 @@ public class MonitorPanel extends JPanel {
         List<Queue<PCB>> blockedQueues = kernel.getAllBlockedQueues();
         if (blockedQueues == null) return count;
         for (int i = 0; i < blockedQueues.size(); i++) {
-            count += countQueue(blockedQueues.get(i));
+            for (PCB pcb : blockedQueues.get(i))
+                if (pcb.getState() != ProcessState.BLOCKED_SUSPENDED) count++;
         }
         return count;
     }
@@ -695,7 +723,9 @@ public class MonitorPanel extends JPanel {
                 if (isNewQueue) {
                     model.addRow(new Object[]{pcb.getId(), pcb.getName(), pcb.getPriority(), pcb.getMemoryRequired()});
                 } else {
-                    model.addRow(new Object[]{pcb.getId(), pcb.getName(), pcb.getPriority(), pcb.getRemainingTime()});
+                    model.addRow(model == termQueueModel
+                            ? new Object[]{pcb.getId(), pcb.getName(), pcb.getState().getDisplayName()}
+                            : new Object[]{pcb.getId(), pcb.getName(), pcb.getPriority(), pcb.getRemainingTime()});
                 }
                 queue.enqueue(pcb);
             }
@@ -715,11 +745,24 @@ public class MonitorPanel extends JPanel {
                 PCB pcb = q.dequeue();
                 if (pcb != null) {
                     String reason = (pcb.getBlockReason() != null) ? pcb.getBlockReason().name() : "I/O / Semáforo";
-                    blockedQueueModel.addRow(new Object[]{pcb.getId(), pcb.getName(), reason});
+                    if (pcb.getState() != ProcessState.BLOCKED_SUSPENDED)
+                        blockedQueueModel.addRow(new Object[]{pcb.getId(), pcb.getName(), reason});
                     q.enqueue(pcb);
                 }
             }
         }
+    }
+
+    private void refreshSuspendedTables() {
+        readySuspendedModel.setRowCount(0);
+        blockedSuspendedModel.setRowCount(0);
+        for (PCB pcb : kernel.getReadySuspendedQueue())
+            readySuspendedModel.addRow(new Object[]{pcb.getId(), pcb.getName(), pcb.getMemoryRequired()});
+        for (Queue<PCB> queue : kernel.getAllBlockedQueues())
+            for (PCB pcb : queue)
+                if (pcb.getState() == ProcessState.BLOCKED_SUSPENDED)
+                    blockedSuspendedModel.addRow(new Object[]{pcb.getId(), pcb.getName(),
+                            pcb.getBlockReason() == null ? "" : pcb.getBlockReason().getDisplayName()});
     }
 
     private void refreshBuffersTable() {

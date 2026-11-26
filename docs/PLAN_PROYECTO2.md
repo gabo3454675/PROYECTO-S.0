@@ -14,7 +14,7 @@ Disco simulado, planificación de disco y suspensión de procesos.
 | 1 | Disco aislado | `feat/disk` | Gabriel | En progreso |
 | 2 | Sistema de archivos | `feat/filesystem` | Kelvin | Completada |
 | 3 | Procesos de E/S | `feat/io-processes` | Kelvin | En progreso |
-| 4 | Suspensión (mediano plazo) | `feat/swap` | | Pendiente |
+| 4 | Suspensión (mediano plazo) | `feat/swap` | | Implementada en `develop` |
 | 5 | Modo administrador / usuario | `feat/user-mode` | Kelvin | Completada |
 | 6 | Interfaz gráfica | `feat/gui-p2` | | Pendiente |
 | 7 | Persistencia JSON y configuración | `feat/json-p2` | | Pendiente |
@@ -48,7 +48,7 @@ paralelo cuando exista lo que necesitan (ver *Depende de* en cada bloque).
 - [x] `Disk` (hardware) implementa `ClockListener`: avanza un ciclo por tick, el cabezal recorre
       N posiciones por ciclo (configurable) y cada bloque leído/escrito cuesta un ciclo
 - [x] Al terminar una solicitud, el disco avisa para despertar al proceso
-- [ ] Área de swap de tamaño configurable (según la decisión del Bloque 0)
+- [x] Área de swap de tamaño configurable, reservada al final del disco
 - [ ] (Opcional) LOOK / C-LOOK
 
 ## Bloque 2 - Sistema de archivos
@@ -69,7 +69,7 @@ paralelo cuando exista lo que necesitan (ver *Depende de* en cada bloque).
 **Depende de:** Bloques 1 y 2.
 
 - [x] PCB con operación (`IOOperationType`) y ruta del archivo
-- [ ] La interfaz solo crea el proceso; el CRUD lo ejecuta el proceso, nunca la ventana
+- [x] La interfaz solo crea el proceso; el CRUD lo ejecuta el proceso, nunca la ventana
 - [x] Al obtener la CPU, el proceso genera la solicitud y pasa a Bloqueado (motivo E/S)
 - [x] El disco atiende y el proceso vuelve a Listo
 - [x] Cada operación sobre el disco cuenta como instrucción en modo sistema operativo
@@ -79,13 +79,13 @@ paralelo cuando exista lo que necesitan (ver *Depende de* en cada bloque).
 
 **Depende de:** Bloque 3. *El enunciado recomienda dejarlo para el final.*
 
-- [ ] Cola a largo plazo para procesos que no caben en RAM
-- [ ] Elegir un proceso Bloqueado para suspender (criterio a justificar en la defensa)
-- [ ] Suspender y reactivar son solicitudes de E/S que pasan por la cola del disco
-- [ ] Ocupar/liberar bloques del swap (1 unidad de RAM = 1 bloque)
-- [ ] Bloqueado/Suspendido pasa a Listo/Suspendido cuando ocurre su evento
-- [ ] Al liberarse memoria, reactivar un Listo/Suspendido
-- [ ] Log: "Se suspende al proceso P7 para admitir a P9"
+- [x] Cola a largo plazo para procesos que no caben en RAM disponible
+- [x] Elegir un proceso Bloqueado para suspender (primero elegible, incluida E/S activa)
+- [x] Suspender y reactivar son solicitudes de E/S que pasan por la cola del disco
+- [x] Ocupar/liberar bloques del swap (1 MB de RAM = 1 bloque)
+- [x] Bloqueado/Suspendido pasa a Listo/Suspendido cuando ocurre su evento
+- [x] Al liberarse memoria, reactivar un Listo/Suspendido
+- [x] Log: "Se suspende al proceso P7 para admitir a P9"
 
 ## Bloque 5 - Modo administrador / usuario
 
@@ -100,12 +100,12 @@ paralelo cuando exista lo que necesitan (ver *Depende de* en cada bloque).
 
 **Depende de:** Bloques 1–3 (se puede maquetar antes con datos de prueba).
 
-- [ ] `JTree` del sistema de archivos; al seleccionar: nombre, tamaño, dueño, permisos, primer bloque
-- [ ] Mapa de bloques: libre/ocupado, qué archivo o proceso suspendido, posición y sentido del cabezal
+- [x] `JTree` del sistema de archivos; al seleccionar: ruta, tamaño, dueño, permisos, primer bloque
+- [x] Mapa de bloques: libre/ocupado, qué archivo o proceso suspendido, posición y sentido del cabezal
 - [ ] `JTable` de asignación: nombre, bloques, primer bloque, dueño, proceso creador, color
-- [ ] Cola de E/S del disco con la operación de cada solicitud
-- [ ] Selector de política de disco (cambio en caliente) y pausar/reanudar
-- [ ] Colas Listo/Suspendido y Bloqueado/Suspendido, y motivo de cada bloqueo
+- [x] Cola de E/S del disco con la operación de cada solicitud
+- [x] Selector de política de disco (cambio en caliente) y pausar/reanudar en Monitor
+- [x] Colas Listo/Suspendido y Bloqueado/Suspendido, y motivo de cada bloqueo
 - [ ] Log con decisiones del disco: "El disco atiende la solicitud de P4 en el bloque 87 (SSTF)"
 - [ ] Validación de tipo y rango en todos los campos
 - [ ] La interfaz observa al sistema: nada de lógica de ÁvilaOS en las ventanas

@@ -4,6 +4,7 @@ import avilaos.kernel.Kernel;
 import avilaos.kernel.sync.Buffer;
 import avilaos.core.hardware.Computer;
 import avilaos.model.enumeration.ProcessType;
+import avilaos.model.enumeration.IOOperationType;
 import avilaos.model.enumeration.SchedulingPolicyType;
 import avilaos.model.pcb.PCB;
 import avilaos.simulation.SimulationCluster;
@@ -33,6 +34,13 @@ public class ConfigPanel extends JPanel {
     private JTextField txtMemory;
     private JTextField txtInstructions;
     private JTextField txtDeadline;
+    private JPanel ioFields;
+    private JComboBox<IOOperationType> cbIoOperation;
+    private JTextField txtTargetPath;
+    private JTextField txtFileBlocks;
+    private JTextField txtFileOwner;
+    private JCheckBox chkFilePublic;
+    private JTextField txtNewFileName;
 
     private JTextField txtBufferId;
     private JTextField txtBufferCapacity;
@@ -117,11 +125,35 @@ public class ConfigPanel extends JPanel {
         fieldsPanel.add(createLabeledField("Elementos", txtElementsRequired));
         formPanel.add(fieldsPanel, BorderLayout.CENTER);
 
+        ioFields = new JPanel(new GridLayout(0, 3, 12, 8));
+        ioFields.setBorder(BorderFactory.createTitledBorder("Operación de archivo"));
+        cbIoOperation = new JComboBox<>(new IOOperationType[]{IOOperationType.CREATE,
+                IOOperationType.READ, IOOperationType.UPDATE, IOOperationType.DELETE});
+        txtTargetPath = new JTextField("/docs/archivo.txt");
+        txtFileBlocks = new JTextField("1");
+        txtFileOwner = new JTextField("admin");
+        chkFilePublic = new JCheckBox("Acceso público", true);
+        txtNewFileName = new JTextField("nuevo-nombre.txt");
+        ioFields.add(createLabeledField("Operación", cbIoOperation));
+        ioFields.add(createLabeledField("Ruta absoluta", txtTargetPath));
+        ioFields.add(createLabeledField("Bloques (crear)", txtFileBlocks));
+        ioFields.add(createLabeledField("Propietario (crear)", txtFileOwner));
+        ioFields.add(createLabeledField("Nombre nuevo (actualizar)", txtNewFileName));
+        ioFields.add(chkFilePublic);
+        ioFields.setVisible(false);
+        cbType.addActionListener(e -> {
+            ioFields.setVisible(cbType.getSelectedItem() == ProcessType.IO_BOUND);
+            formPanel.revalidate();
+        });
+
         JButton btnAdd = new JButton("Agregar Proceso");
         btnAdd.addActionListener(e -> addProcess());
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         actions.add(btnAdd);
-        formPanel.add(actions, BorderLayout.SOUTH);
+        JPanel footer = new JPanel(new BorderLayout());
+        footer.add(ioFields, BorderLayout.CENTER);
+        footer.add(actions, BorderLayout.SOUTH);
+        formPanel.add(footer, BorderLayout.SOUTH);
         panel.add(formPanel, BorderLayout.NORTH);
 
         // Tabla de Procesos
@@ -215,7 +247,14 @@ public class ConfigPanel extends JPanel {
                 new String[]{"ID", "RAM (MB)", "Política", "Quantum", "Ciclos", "CPU (%)",
                     "Throughput (proc/s)", "Respuesta (ciclos)", "Equidad Jain",
                     "Espera sem. (ciclos)", "Producidos", "Consumidos"}, 0);
-        panel.add(new JScrollPane(new JTable(computerTableModel)), BorderLayout.CENTER);
+        JTable computerTable = new JTable(computerTableModel);
+        computerTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        for (int i = 0; i < computerTable.getColumnCount(); i++) {
+            int width = Math.max(95, computerTable.getFontMetrics(computerTable.getFont())
+                    .stringWidth(computerTable.getColumnName(i)) + 24);
+            computerTable.getColumnModel().getColumn(i).setPreferredWidth(width);
+        }
+        panel.add(new JScrollPane(computerTable), BorderLayout.CENTER);
         refreshComputerChoices();
         return panel;
     }
@@ -316,8 +355,29 @@ public class ConfigPanel extends JPanel {
                     throw new IllegalArgumentException("El buffer debe existir y los valores deben ser positivos.");
                 }
             }
-            PCB pcb = new PCB(name, compId, selectedType, priority, memory, deadline, inst,
-                    bufferId, interval, elements);
+            PCB pcb;
+            if (selectedType == ProcessType.IO_BOUND) {
+                Kernel targetKernel = simulation == null ? legacyKernel : simulation.getKernel(compId);
+                if (targetKernel == null || targetKernel.getIoProcessManager() == null)
+                    throw new IllegalArgumentException("Carga un escenario con disco antes de crear operaciones de archivo.");
+                String path = txtTargetPath.getText().trim();
+                if (!path.startsWith("/") || path.length() < 2)
+                    throw new IllegalArgumentException("Indica una ruta absoluta de archivo.");
+                IOOperationType operation = (IOOperationType) cbIoOperation.getSelectedItem();
+                pcb = switch (operation) {
+                    case CREATE -> PCB.forFileCreate(name, compId, priority, memory, deadline, inst,
+                            path, Integer.parseInt(txtFileBlocks.getText().trim()),
+                            txtFileOwner.getText().trim(), chkFilePublic.isSelected());
+                    case READ -> PCB.forFileRead(name, compId, priority, memory, deadline, inst, path);
+                    case UPDATE -> PCB.forFileUpdate(name, compId, priority, memory, deadline, inst,
+                            path, txtNewFileName.getText().trim());
+                    case DELETE -> PCB.forFileDelete(name, compId, priority, memory, deadline, inst, path);
+                    default -> throw new IllegalArgumentException("Operación de archivo inválida");
+                };
+            } else {
+                pcb = new PCB(name, compId, selectedType, priority, memory, deadline, inst,
+                        bufferId, interval, elements);
+            }
 
             if (simulation != null) simulation.submitProcess(pcb);
             else legacyKernel.submitProcess(pcb);
@@ -483,6 +543,7 @@ public class ConfigPanel extends JPanel {
     private void refreshKernelProcesses(Kernel kernel) {
         refreshProcessesFromQueue(kernel.getNewQueue());
         refreshProcessesFromQueue(kernel.getReadyQueue());
+        refreshProcessesFromQueue(kernel.getReadySuspendedQueue());
         refreshProcessesFromQueue(kernel.getTerminatedQueue());
         refreshProcessesFromQueue(kernel.getAllBlockedQueues());
         PCB running = kernel.getComputer().getCpu().getCurrentProcess();
