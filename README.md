@@ -44,6 +44,10 @@ y selecciona primero `config/project2-disk-demo.json` y luego
 `config/project2-processes-demo.json`. Los procesos de E/S avanzan con el reloj
 del computador. El tamaño de swap se lee y valida, pero su reserva y la vista
 gráfica del disco siguen pendientes.
+Desde **Archivo → Guardar disco Proyecto 2 (JSON)...** se exportan el cabezal,
+la velocidad y el árbol de archivos actuales para volver a cargarlos junto con
+el JSON de procesos. En el monitor, **Modo** y **Usuario** determinan los permisos
+de cada solicitud cuando entra en la cola del disco.
 
 - [x] Fundación, hardware, kernel, planificación y sincronización.
 - [x] Configuración global y por computador; simulación distribuida con buffers compartidos.

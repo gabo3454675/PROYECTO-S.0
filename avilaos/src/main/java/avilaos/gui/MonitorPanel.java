@@ -50,6 +50,7 @@ public class MonitorPanel extends JPanel {
     private JPanel dashboardContent;
     private JComboBox<SchedulingPolicyType> cbPolicy;
     private JComboBox<UserMode> cbUserMode;
+    private JTextField txtActiveUser;
     private JButton btnAdvanceCycle;
     private JButton btnStart;
     private JButton btnPause;
@@ -167,6 +168,12 @@ public class MonitorPanel extends JPanel {
         });
         cbUserMode.setSelectedItem(simulation != null ? simulation.getUserMode() : kernel.getUserMode());
         cbUserMode.addActionListener(e -> changeUserMode());
+        txtActiveUser = new JTextField(simulation != null ? simulation.getActiveUser() : kernel.getActiveUser(), 8);
+        txtActiveUser.setToolTipText("Usuario que solicita las operaciones de archivos");
+        txtActiveUser.addActionListener(e -> changeActiveUser());
+        txtActiveUser.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override public void focusLost(java.awt.event.FocusEvent e) { changeActiveUser(); }
+        });
 
         btnAdvanceCycle = new JButton("Avanzar ciclo");
         btnAdvanceCycle.addActionListener(e -> advanceCycle(true));
@@ -185,6 +192,8 @@ public class MonitorPanel extends JPanel {
         topPanel.add(cbPolicy);
         topPanel.add(new JLabel("Modo"));
         topPanel.add(cbUserMode);
+        topPanel.add(new JLabel("Usuario"));
+        topPanel.add(txtActiveUser);
         topPanel.add(btnAdvanceCycle);
         topPanel.add(btnStart);
         topPanel.add(btnPause);
@@ -513,6 +522,22 @@ public class MonitorPanel extends JPanel {
                 : "acceso restringido a lectura de archivos propios/públicos y creación/modificación solo en recursos propios ('"
                   + kernel.getActiveUser() + "').";
         appendLog("Modo de sesión cambiado a: " + selectedMode.getDisplayName() + " (" + detail + ")");
+    }
+
+    private void changeActiveUser() {
+        String selected = txtActiveUser.getText().trim();
+        if (selected.isEmpty()) {
+            txtActiveUser.setText(simulation != null ? simulation.getActiveUser() : kernel.getActiveUser());
+            JOptionPane.showMessageDialog(this, "El usuario activo no puede estar vacío.",
+                    "Usuario inválido", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        String current = simulation != null ? simulation.getActiveUser() : kernel.getActiveUser();
+        if (selected.equals(current)) return;
+        if (simulation != null) simulation.setActiveUser(selected);
+        else kernel.setActiveUser(selected);
+        txtActiveUser.setText(selected);
+        appendLog("Usuario activo cambiado a: " + selected);
     }
 
     public void updateMonitor() {

@@ -33,6 +33,27 @@ class UserModePermissionTest {
     }
 
     @Test
+    void requestKeepsSubmittingUsersPermissionsWhileSessionChanges() {
+        FileSystemManager fs = new FileSystemManager(new DiskBlockMap(100));
+        fs.createDirectory("/", "docs", "admin", true);
+        fs.createFile("/docs", "secret.txt", 1, "alice", false, "SYS");
+        SimulationCluster cluster = buildClusterWithFilesystem(fs);
+        try {
+            cluster.setUserMode(UserMode.USER);
+            cluster.setActiveUser("bob");
+            PCB request = PCB.forFileRead("read-secret", 0, 1, 32, 100, 1, "/docs/secret.txt");
+            cluster.submitProcess(request);
+            cluster.advanceCycle();
+            cluster.setUserMode(UserMode.ADMIN);
+            cluster.setActiveUser("alice");
+            runUntilTerminated(cluster, request, 20);
+            assertTrue(request.getIoErrorMessage().contains("Permiso denegado"));
+        } finally {
+            cluster.shutdown();
+        }
+    }
+
+    @Test
     void adminModeAllowsAllOperationsOnPrivateResources() {
         FileSystemManager fs = new FileSystemManager(new DiskBlockMap(100));
         fs.createDirectory("/", "privado_otro", "otro_usuario", false);

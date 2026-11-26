@@ -14,6 +14,29 @@ class Project2ConfigLoaderTest {
     @TempDir Path temp;
 
     @Test
+    void savedDiskCanBeLoadedWithCurrentFiles() throws Exception {
+        SimulationCluster original = Project2ConfigLoader.load(
+                Path.of("config/project2-disk-demo.json"),
+                Path.of("config/project2-processes-demo.json"));
+        Path saved = temp.resolve("saved-disk.json");
+        try {
+            for (int cycle = 0; cycle < 60; cycle++) original.advanceCycle();
+            Project2ConfigLoader.saveDisk(saved, original);
+        } finally {
+            original.shutdown();
+        }
+        SimulationCluster restored = Project2ConfigLoader.load(saved,
+                Path.of("config/project2-processes-demo.json"));
+        try {
+            var files = restored.getComputer(0).getKernel().getIoProcessManager().getFileSystemManager();
+            assertEquals(3, files.resolve("/usuarios/resumen.txt").getSizeInBlocks());
+            assertEquals("user1", files.resolve("/usuarios/resumen.txt").getOwner());
+        } finally {
+            restored.shutdown();
+        }
+    }
+
+    @Test
     void requiresBothFilesAndRunsIoThroughDiskClock() throws Exception {
         Path disk = temp.resolve("disk.json");
         Path processes = temp.resolve("processes.json");

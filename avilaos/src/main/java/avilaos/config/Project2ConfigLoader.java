@@ -11,6 +11,10 @@ import avilaos.model.pcb.PCB;
 import avilaos.simulation.SimulationCluster;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import avilaos.core.filesystem.FileSystemNode;
+import avilaos.core.hardware.Disk;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -20,6 +24,39 @@ public final class Project2ConfigLoader {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private Project2ConfigLoader() { }
+
+    /** Guarda el disco y el árbol de archivos en el formato que acepta load. */
+    public static void saveDisk(Path destination, SimulationCluster simulation) throws IOException {
+        if (destination == null || simulation == null || simulation.getComputers().size() != 1) {
+            throw new IllegalArgumentException("Se requiere un escenario de Proyecto 2 con un computador");
+        }
+        var computer = simulation.getComputer(0);
+        Disk disk = computer.getDisk();
+        if (disk == null) throw new IllegalArgumentException("El escenario no tiene disco");
+        FileSystemManager files = computer.getKernel().getIoProcessManager().getFileSystemManager();
+        ObjectNode root = JSON.createObjectNode();
+        ObjectNode config = root.putObject("diskConfig");
+        config.put("totalBlocks", files.getBlockMap().getTotalBlocks());
+        config.put("initialHead", disk.getHeadPosition());
+        config.put("positionsPerCycle", disk.getPositionsPerCycle());
+        ArrayNode entries = root.putArray("fileSystem");
+        for (FileSystemNode child : files.getRoot().getChildren()) saveNode(child, entries);
+        JSON.writerWithDefaultPrettyPrinter().writeValue(destination.toFile(), root);
+    }
+
+    private static void saveNode(FileSystemNode node, ArrayNode entries) {
+        ObjectNode item = entries.addObject();
+        item.put("path", node.getPath());
+        item.put("type", node.isDirectory() ? "DIRECTORY" : "FILE");
+        item.put("owner", node.getOwner());
+        item.put("permissions", node.isPublicAccess() ? "public" : "private");
+        if (node.isDirectory()) {
+            for (FileSystemNode child : node.getChildren()) saveNode(child, entries);
+        } else {
+            item.put("startBlock", node.getFirstBlock());
+            item.put("blocks", node.getSizeInBlocks());
+        }
+    }
 
     public static SimulationCluster load(Path diskFile, Path processFile) throws IOException {
         if (diskFile == null || processFile == null) {

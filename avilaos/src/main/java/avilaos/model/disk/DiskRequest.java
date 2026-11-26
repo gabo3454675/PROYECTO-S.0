@@ -1,6 +1,7 @@
 package avilaos.model.disk;
 
 import avilaos.model.enumeration.IOOperationType;
+import avilaos.model.enumeration.UserMode;
 
 /**
  * Solicitud de E/S que un proceso deja en la cola única del disco.
@@ -17,6 +18,8 @@ public final class DiskRequest {
     private final String targetPath;
     private final int targetBlock;
     private final long arrivalCycle;
+    private final UserMode userMode;
+    private final String activeUser;
 
     /**
      * @param processId    id del PCB que espera la solicitud
@@ -28,6 +31,12 @@ public final class DiskRequest {
      */
     public DiskRequest(long processId, String processName, IOOperationType operation,
                        String targetPath, int targetBlock, long arrivalCycle) {
+        this(processId, processName, operation, targetPath, targetBlock, arrivalCycle, UserMode.ADMIN, "admin");
+    }
+
+    public DiskRequest(long processId, String processName, IOOperationType operation,
+                       String targetPath, int targetBlock, long arrivalCycle,
+                       UserMode userMode, String activeUser) {
         if (operation == null) {
             throw new IllegalArgumentException("La solicitud debe indicar una operación");
         }
@@ -41,6 +50,9 @@ public final class DiskRequest {
         this.targetPath = targetPath;
         this.targetBlock = targetBlock;
         this.arrivalCycle = arrivalCycle;
+        this.userMode = java.util.Objects.requireNonNull(userMode, "Modo requerido");
+        if (activeUser == null || activeUser.isBlank()) throw new IllegalArgumentException("Usuario requerido");
+        this.activeUser = activeUser;
     }
 
     private static synchronized long nextRequestId() {
@@ -74,6 +86,9 @@ public final class DiskRequest {
     public long getArrivalCycle() {
         return arrivalCycle;
     }
+
+    public UserMode getUserMode() { return userMode; }
+    public String getActiveUser() { return activeUser; }
 
     @Override
     public String toString() {

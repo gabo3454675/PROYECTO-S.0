@@ -245,7 +245,7 @@ public IOProcessManager getIoProcessManager() {
 
     private void handleRunningProcess(PCB pcb) {
         if (ioProcessManager != null && pcb.hasPendingIORequest()) {
-            ioProcessManager.submitFromCpu(pcb, cpu, currentCycle);
+            ioProcessManager.submitFromCpu(pcb, cpu, currentCycle, this);
             if (pcb.getState() == ProcessState.BLOCKED) {
                 cpu.contextSwitch(null);
                 addToBlockedQueue(pcb);

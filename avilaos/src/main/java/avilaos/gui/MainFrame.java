@@ -110,6 +110,9 @@ public class MainFrame extends JFrame {
         JMenuItem loadProject2Item = new JMenuItem("Cargar Proyecto 2 (dos JSON)...");
         loadProject2Item.addActionListener(e -> loadProject2Configuration());
 
+        JMenuItem saveDiskItem = new JMenuItem("Guardar disco Proyecto 2 (JSON)...");
+        saveDiskItem.addActionListener(e -> saveProject2Disk());
+
         JMenu exportMenu = new JMenu("Exportar Monitor");
         addExportItem(exportMenu, "PNG", "png");
         addExportItem(exportMenu, "CSV", "csv");
@@ -121,6 +124,7 @@ public class MainFrame extends JFrame {
         fileMenu.add(saveItem);
         fileMenu.add(loadItem);
         fileMenu.add(loadProject2Item);
+        fileMenu.add(saveDiskItem);
         fileMenu.add(exportMenu);
         fileMenu.addSeparator();
         fileMenu.add(exitItem);
@@ -177,6 +181,26 @@ public class MainFrame extends JFrame {
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(this, "Error al guardar: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
+        }
+    }
+
+    private void saveProject2Disk() {
+        boolean resume = monitorPanel.isAutomaticAdvancementRunning();
+        monitorPanel.pauseAutomaticAdvancement();
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Guardar sistema de archivos del Proyecto 2");
+        chooser.setSelectedFile(new File("project2-disk.json"));
+        try {
+            if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+            Path path = chooser.getSelectedFile().toPath();
+            if (!path.toString().toLowerCase().endsWith(".json")) path = Path.of(path + ".json");
+            Project2ConfigLoader.saveDisk(path, simulation);
+            JOptionPane.showMessageDialog(this, "Disco guardado en:\n" + path.toAbsolutePath());
+        } catch (IOException | RuntimeException ex) {
+            JOptionPane.showMessageDialog(this, "No se pudo guardar el disco:\n" + ex.getMessage(),
+                    "Error de guardado", JOptionPane.ERROR_MESSAGE);
+        } finally {
+            if (resume) monitorPanel.startAutomaticAdvancement();
         }
     }
 

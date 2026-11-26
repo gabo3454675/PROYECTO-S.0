@@ -43,7 +43,7 @@ public class IOProcessManager {
      * cambia a modo {@link ExecutionMode#KERNEL}, encola su {@link DiskRequest}
      * en {@link DiskScheduler} y bloquea el proceso por {@link BlockReason#IO_WAIT}.
      */
-    public DiskRequest submitFromCpu(PCB pcb, CPU cpu, long currentCycle) {
+    public DiskRequest submitFromCpu(PCB pcb, CPU cpu, long currentCycle, Kernel kernel) {
         if (pcb == null || !pcb.hasPendingIORequest()) {
             return null;
         }
@@ -61,7 +61,8 @@ public class IOProcessManager {
                 pcb.getIoOperation(),
                 pcb.getTargetPath(),
                 targetBlock,
-                currentCycle
+                currentCycle,
+                kernel.getUserMode(), kernel.getActiveUser()
         );
 
         diskScheduler.submit(request);
@@ -88,7 +89,7 @@ public class IOProcessManager {
         if (pcb == null || kernel.isProcessTerminated(pcb)) {
             return;
         }
-        String error = executeFileSystemOperation(request, pcb, kernel);
+        String error = executeFileSystemOperation(request, pcb);
 
         pcb.setIoErrorMessage(error);
         pcb.markIoRequestCompleted();
@@ -113,14 +114,14 @@ public class IOProcessManager {
         return Math.max(0, node.getFirstBlock());
     }
 
-    private String executeFileSystemOperation(DiskRequest request, PCB pcb, Kernel kernel) {
+    private String executeFileSystemOperation(DiskRequest request, PCB pcb) {
         IOOperationType op = request.getOperation();
         if (op == null || !op.isFileOperation()) {
             return null;
         }
 
-        UserMode mode = kernel.getUserMode();
-        String currentUser = kernel.getActiveUser();
+        UserMode mode = request.getUserMode();
+        String currentUser = request.getActiveUser();
         String path = request.getTargetPath();
 
         try {
