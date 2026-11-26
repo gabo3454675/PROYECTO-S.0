@@ -15,7 +15,7 @@ Disco simulado, planificación de disco y suspensión de procesos.
 | 2 | Sistema de archivos | `feat/filesystem` | Kelvin | Completada |
 | 3 | Procesos de E/S | `feat/io-processes` | Kelvin | En progreso |
 | 4 | Suspensión (mediano plazo) | `feat/swap` | | Pendiente |
-| 5 | Modo administrador / usuario | `feat/user-mode` | | Pendiente |
+| 5 | Modo administrador / usuario | `feat/user-mode` | Kelvin | Completada |
 | 6 | Interfaz gráfica | `feat/gui-p2` | | Pendiente |
 | 7 | Persistencia JSON y configuración | `feat/json-p2` | | Pendiente |
 | 8 | Métricas y gráfico del cabezal | `feat/disk-metrics` | | Pendiente |
