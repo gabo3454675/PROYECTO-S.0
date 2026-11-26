@@ -9,6 +9,7 @@ import avilaos.metrics.MetricsSnapshot;
 import avilaos.model.enumeration.BlockReason;
 import avilaos.model.enumeration.ProcessState;
 import avilaos.model.enumeration.SchedulingPolicyType;
+import avilaos.model.enumeration.UserMode;
 import avilaos.model.interfaces.StateChangeListener;
 import avilaos.model.pcb.PCB;
 import avilaos.simulation.SimulationCluster;
@@ -48,6 +49,7 @@ public class MonitorPanel extends JPanel {
     private JPanel headerPanel;
     private JPanel dashboardContent;
     private JComboBox<SchedulingPolicyType> cbPolicy;
+    private JComboBox<UserMode> cbUserMode;
     private JButton btnAdvanceCycle;
     private JButton btnStart;
     private JButton btnPause;
@@ -151,6 +153,21 @@ public class MonitorPanel extends JPanel {
         cbPolicy = new JComboBox<>(SchedulingPolicyType.values());
         cbPolicy.addActionListener(e -> changePolicy());
 
+        cbUserMode = new JComboBox<>(UserMode.values());
+        cbUserMode.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                                                          boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value instanceof UserMode mode) {
+                    setText(mode.getDisplayName());
+                }
+                return this;
+            }
+        });
+        cbUserMode.setSelectedItem(simulation != null ? simulation.getUserMode() : kernel.getUserMode());
+        cbUserMode.addActionListener(e -> changeUserMode());
+
         btnAdvanceCycle = new JButton("Avanzar ciclo");
         btnAdvanceCycle.addActionListener(e -> advanceCycle(true));
         btnStart = new JButton("Iniciar");
@@ -166,6 +183,8 @@ public class MonitorPanel extends JPanel {
         topPanel.add(lblCurrentCycle);
         topPanel.add(new JLabel("Planificador"));
         topPanel.add(cbPolicy);
+        topPanel.add(new JLabel("Modo"));
+        topPanel.add(cbUserMode);
         topPanel.add(btnAdvanceCycle);
         topPanel.add(btnStart);
         topPanel.add(btnPause);
@@ -433,9 +452,14 @@ public class MonitorPanel extends JPanel {
 
             @Override
             public void onProcessTerminated(PCB pcb) {
-                appendLog("Nodo " + computerId + ": proceso " + pcb.getName()
-                        + " (ID " + pcb.getId() + ") terminó en ciclo "
-                        + targetKernel.getCurrentCycle() + ".");
+                if (pcb.getIoErrorMessage() != null && !pcb.getIoErrorMessage().isBlank()) {
+                    appendLog("Nodo " + computerId + ": operación rechazada para proceso " + pcb.getName()
+                            + " (ID " + pcb.getId() + ") -> " + pcb.getIoErrorMessage());
+                } else {
+                    appendLog("Nodo " + computerId + ": proceso " + pcb.getName()
+                            + " (ID " + pcb.getId() + ") terminó en ciclo "
+                            + targetKernel.getCurrentCycle() + ".");
+                }
             }
         });
     }
@@ -475,6 +499,22 @@ public class MonitorPanel extends JPanel {
         }
     }
 
+    private void changeUserMode() {
+        if (updatingControls) return;
+        UserMode selectedMode = (UserMode) cbUserMode.getSelectedItem();
+        if (selectedMode == null) return;
+        if (simulation != null) {
+            simulation.setUserMode(selectedMode);
+        } else if (kernel != null) {
+            kernel.setUserMode(selectedMode);
+        }
+        String detail = selectedMode.isAdmin()
+                ? "acceso total a todas las operaciones."
+                : "acceso restringido a lectura de archivos propios/públicos y creación/modificación solo en recursos propios ('"
+                  + kernel.getActiveUser() + "').";
+        appendLog("Modo de sesión cambiado a: " + selectedMode.getDisplayName() + " (" + detail + ")");
+    }
+
     public void updateMonitor() {
         if (kernel == null) return;
         if (automaticCycleTimer.isRunning()) {
@@ -498,6 +538,9 @@ public class MonitorPanel extends JPanel {
             cbComputer.setSelectedItem(kernel.getComputer().getId());
         }
         cbPolicy.setSelectedItem(kernel.getScheduler().getPolicy().getType());
+        if (cbUserMode != null) {
+            cbUserMode.setSelectedItem(simulation != null ? simulation.getUserMode() : kernel.getUserMode());
+        }
         updatingControls = false;
         updateGlobalMetrics();
 
@@ -738,30 +781,42 @@ public class MonitorPanel extends JPanel {
         appendCsvRow(csv, "General", "0", "Ciclo actual",
                 simulation == null ? kernel.getCurrentCycle() : simulation.getCurrentCycle());
         appendCsvRow(csv, "General", "0", "Computador seleccionado", kernel.getComputer().getId());
-        appendCsvRow(csv, "General", "0", "Política", kernel.getScheduler().getPolicy().getType());
-        appendCsvRow(csv, "Métricas", "0", "Utilización CPU (%)", kernel.getCpuUtilization());
-        appendCsvRow(csv, "Métricas", "0", "Throughput (procesos/ciclo)", kernel.getThroughput());
-        appendMetricsToCsv(csv, "Métricas", kernel.getMetricsSnapshot());
+        appendCsvRow(csv, "General", "0", "Política", kernel.getScheduler().getPolicy().getType().getDisplayName());
+        appendCsvRow(csv, "General", "0", "Utilización CPU (%)", kernel.getCpuUtilization());
+        appendCsvRow(csv, "General", "0", "Throughput (procesos/ciclo)", kernel.getThroughput());
+        appendCsvRow(csv, "General", "0", "Throughput (procesos/s)", kernel.getThroughputPerSecond());
+        appendCsvRow(csv, "General", "0", "Tiempo de respuesta promedio (ciclos)",
+                kernel.getMetricsCollector().getAverageResponseTime());
+        appendCsvRow(csv, "General", "0", "Índice de equidad de Jain",
+                kernel.getMetricsCollector().getFairnessIndex());
+        appendCsvRow(csv, "General", "0", "Espera promedio de semáforo (ciclos)",
+                kernel.getMetricsCollector().getAverageSemaphoreBlockedCycles());
+        appendCsvRow(csv, "General", "0", "Elementos producidos",
+                kernel.getMetricsCollector().getProducedElements());
+        appendCsvRow(csv, "General", "0", "Elementos consumidos",
+                kernel.getMetricsCollector().getConsumedElements());
         if (simulation != null) {
-            appendCsvRow(csv, "Métricas globales", "0", "Utilización CPU (%)", getGlobalCpuUtilization());
+            MetricsSnapshot metrics = simulation.getMetricsSnapshot();
+            appendCsvRow(csv, "Métricas globales", "0", "Utilización CPU (%)", metrics.cpuUtilization());
             appendCsvRow(csv, "Métricas globales", "0", "Throughput (procesos/ciclo)", getGlobalThroughput());
-            appendMetricsToCsv(csv, "Métricas globales", simulation.getMetricsSnapshot());
+            appendMetricsToCsv(csv, "Métricas globales", metrics);
         }
-        appendChartDataToCsv(csv);
-        appendCsvRow(csv, "CPU", "0", "Proceso en ejecución",
-                kernel.getComputer().getCpu().getCurrentProcess() == null
-                        ? "Ninguno"
-                        : kernel.getComputer().getCpu().getCurrentProcess().getName());
-        appendCsvRow(csv, "Memoria", "0", "Usada (MB)",
+        appendCsvRow(csv, "General", "0", "Memoria usada (MB)",
                 kernel.getComputer().getRam().getUsedSize() / BYTES_PER_MB);
-        appendCsvRow(csv, "Memoria", "0", "Total (MB)",
+        appendCsvRow(csv, "General", "0", "Memoria total (MB)",
                 kernel.getComputer().getRam().getTotalSize() / BYTES_PER_MB);
+        appendChartDataToCsv(csv);
         appendCsvTable(csv, "NEW", newQueueModel);
         appendCsvTable(csv, "READY", readyQueueModel);
         appendCsvTable(csv, "BLOCKED", blockedQueueModel);
         appendCsvTable(csv, "TERMINATED", termQueueModel);
         appendCsvTable(csv, "Buffers", buffersModel);
-        appendCsvRow(csv, "Log", "0", "Eventos", txtLog.getText());
+        String[] logLines = txtLog.getText().split("\\R");
+        for (int i = 0; i < logLines.length; i++) {
+            if (!logLines[i].isBlank()) {
+                appendCsvRow(csv, "Eventos", i + 1, "Mensaje", logLines[i]);
+            }
+        }
         Files.writeString(file.toPath(), csv.toString(), StandardCharsets.UTF_8);
     }
 
