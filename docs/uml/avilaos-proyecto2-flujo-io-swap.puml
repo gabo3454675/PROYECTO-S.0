@@ -1,0 +1,97 @@
+@startuml
+' Flujo de I/O y Swap en ÁvilaOS Proyecto 2
+' Secuencia completa: solicitud E/S → bloqueo → suspensión → disco → reactivación
+
+' ============================================================
+' PARTICIPANTES
+' ============================================================
+
+actor "Usuario" as user
+participant "MainFrame GUI" as gui
+participant "Kernel" as kernel
+participant "Scheduler" as scheduler
+participant "MemoryManager" as memman
+participant "IOProcessManager" as iomanager
+participant "DiskScheduler" as disksched
+participant "Disk BlockMap" as blockmap
+participant "FileSystem" as fs
+
+' ============================================================
+' SECUENCIA: Flujo Completo
+' ============================================================
+
+user -> gui : Crea proceso y envía operación de disco
+gui -> kernel : submitProcess(PCB con operación I/O)
+kernel -> scheduler : selectNext() - proceso a RUNNING
+kernel -> memman : checkNewQueue(scheduler) - admitir en RAM
+memman -> kernel : admitProcess(pcb) - TRUE/FALSE
+
+alt Admisión EXITOSA
+    kernel -> scheduler : addToReady(pcb)
+    kernel -> cpu : contextSwitch(pcb), executeCycle()
+    pcb -> kernel : ejecuta instrucciones
+    kernel -> iomanager : submitFromCpu(pcb, cpu, cycle, this)
+    iomanager -> disksched : submit(DiskRequest SUSPEND/READ/WRITE)
+else Sin RAM (presión de memoria)
+    kernel -> memman : canAdmit() - FALSE
+    memman -> kernel : Nueva cola - proceso se queda en NEW
+    kernel -> manageSwap() : suspender proceso bloqueado
+    alt Puede suspender
+        kernel -> blockmap : allocateSwap(processId, blocksNeeded)
+        blockmap -> kernel : first block index
+        kernel -> swapBlocks : put(processId, firstBlock)
+        kernel -> swapPending : put(processId, true)
+        kernel -> disksched : submit(DiskRequest SUSPEND)
+        disksched -> blockmap : ejecutar operación SUSPEND
+        blockmap -> swap : reservar área final
+        kernel -> suspended : proceso BLOCKED_SUSPENDED / READY_SUSPENDED
+    alt No puede suspender (swap lleno)
+        kernel : proceso permanece en NEW/cola larga
+    end
+end
+
+' ============================================================
+' SECUENCIA: Finalización de E/S y Reactivación
+' ============================================================
+
+disksched -> kernel : completeSwapRequest(DiskRequest)
+kernel -> kernel : completeSwapRequest()
+kernel -> memman : releaseSwap(pcb), resume process
+memman -> kernel : reservar para resume
+kernel -> pcb : setState(READY) o READY_SUSPENDED
+kernel -> scheduler : addToReady(pcb)
+kernel -> gui : onSwapEvent(pcb, "Se reactiva...")
+gui : Actualiza monitor - colas, estados, métricas
+
+' ============================================================
+' FLUJO BÁSICO SIN SUSPENSIÓN
+' ============================================================
+
+user -> gui : Operación de archivo (CREATE/READ/UPDATE/DELETE)
+gui -> kernel : submitProcess(PCB operation)
+kernel -> scheduler : selectNext()
+kernel -> cpu : executeCycle()
+process -> iomanager : hasPendingIORequest - TRUE
+iomanager -> disksched : submit(DiskRequest operation, path)
+disksched -> blockmap : policy.selectNext(request)
+blockmap -> fs : readBlock/writeBlock/ deleteBlock
+fs -> blockmap : actualiza mapa de bloques, dueño, permisos
+blockmap -> disksched : completed request
+disksched -> iomanager : request completed
+iomanager -> kernel : process completed I/O
+kernel -> scheduler : addToReady(process)
+kernel -> cpu : contextSwitch(process), continue execution
+
+' ============================================================
+' ESTADOS DE PROCESO
+' ============================================================
+
+state "NEW" { [PCB en cola NEW] }
+state "READY" { [PCB en cola Ready] }
+state "RUNNING" { PCB en CPU }
+state "BLOCKED" { [PCB esperando I/O/Memoria] }
+state "BLOCKED_SUSPENDED" { [PCB en swap, bloqueado] }
+state "READY_SUSPENDED" { [PCB en swap, listo] }
+state "TERMINATED" { [PCB finalizado] }
+
+@enduml

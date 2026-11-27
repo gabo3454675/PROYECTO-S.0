@@ -1,0 +1,95 @@
+@startuml
+' Componentes del Proyecto 2 de ÁvilaOS
+
+' ============================================================
+' CAPAS PRINCIPALES
+' ============================================================
+
+package "avilaos/src/main/java/avilaos/" {
+    [SimulationCluster] as cluster
+    [Kernel] as kernel
+    [ConfigManager] as config
+    [Project2ConfigLoader] as p2loader
+    [MetricsCollector] as metrics
+}
+
+package "avilaos/src/main/java/avilaos/kernel/" {
+    direction LR
+    [Scheduler] as scheduler
+    [MemoryManager] as memman
+    [SyncManager] as syncman
+    [ProcessManager] as procman
+    [IOProcessManager] as iomanager
+    [DiskScheduler] as disksched
+}
+
+package "avilaos/src/main/java/avilaos/model/" {
+    direction LR
+    [PCB] as pcb
+    [StateChangeListener] as sclistener
+    [MetricsListener] as mlistener
+    [SchedulingPolicy] as spolicy
+}
+
+package "avilaos/src/main/java/avilaos/core/" {
+    direction LR
+    [Computer] as computer
+    [CPU] as cpu
+    [RAM] as ram
+    [Disk] as disk
+}
+
+package "avilaos/src/main/java/avilaos/gui/" {
+    direction LR
+    [MainFrame] as mainframe
+    [ConfigPanel] as configpanel
+    [MonitorPanel] as monitorpanel
+    [Project2DiskPanel] as p2diskpanel
+}
+
+' ============================================================
+' RELACIONES PRINCIPALES
+' ============================================================
+
+' Cluster coordina la simulación
+cluster --> kernel : gestiona ciclos y recursos
+cluster --> config : carga configuración
+cluster --> metrics : notifica métricas
+
+' Kernel es el corazón de cada computador
+kernel --> scheduler : planificación de CPU
+kernel --> memman : gestión de RAM y procesos
+kernel --> syncman : sincronización y buffers
+kernel --> iomanager : subsistema E/S disco
+kernel --> procman : ciclo de vida de procesos
+
+' Memoria gestiona admisión y swap
+memman --> pcb : admisión/suspensión de PCB
+memman --> swap : área de swap reservada
+
+' I/O manager coordina disco y procesos
+iomanager --> disksched : cola de E/S y políticas
+iomanager --> pcb : submite operaciones desde CPU
+
+' Scheduler usa políticas
+scheduler --> spolicy : FCFS/RR/EDF/Priority
+
+' GUI observa y envía comandos
+mainframe --> config : interfaz configuración
+mainframe --> kernel : muestra métricas y estado
+mainframe --> p2diskpanel : panel disco Proyecto 2
+configpanel --> config : gestiona configuración de proceso/buffer
+monitorpanel --> kernel : muestra y actualiza métricas
+
+' ============================================================
+' ENSAMBLAJE FINAL
+' ============================================================
+
+SimulationCluster -> Kernel : setCycleDurationMs, addComputer
+Kernel -> MemoryManager : constructor Computer.getRam()
+Kernel -> Scheduler : constructor con policyType
+Kernel -> IOProcessManager : attachIOSubsystem(diskScheduler, fileSystemManager)
+Computer -> Disk : attachDisk(policy, files, headPos, direction, speed)
+Computer -> RAM : constructor ramCapacity
+
+@enduml
