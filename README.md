@@ -20,6 +20,10 @@ mvn exec:java
 
 `mvn exec:java` inicia la aplicación gráfica y requiere un entorno de escritorio.
 
+En NetBeans, abre la carpeta raíz del repositorio (la que contiene `pom.xml`)
+mediante **Archivo → Abrir proyecto** y ejecuta **Ejecutar proyecto (F6)**.
+Selecciona un JDK 21 o superior como plataforma Java del proyecto.
+
 ## Estructura
 
 ```
@@ -45,7 +49,7 @@ y selecciona primero `config/project2-disk-demo.json` y luego
 del computador. El swap se reserva al final del disco (1 MB de proceso por bloque).
 Cuando la cola de admisión espera RAM, el planificador suspende el primer proceso
 bloqueado elegible mediante E/S y lo reactiva cuando se libera memoria. La vista
-gráfica del desplazamiento del cabezal sigue pendiente. Para repetir los casos de suspensión y sus
+gráfica del desplazamiento acumulado del cabezal está en el Monitor. Para repetir los casos de suspensión y sus
 límites, consulta [los escenarios JSON de swap](./docs/PRUEBAS_SWAP.md).
 La pestaña **Disco y archivos** muestra el árbol de archivos, los bloques,
 el cabezal y la cola de E/S; el monitor muestra las colas suspendidas y puede

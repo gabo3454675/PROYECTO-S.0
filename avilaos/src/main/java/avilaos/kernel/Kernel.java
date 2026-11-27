@@ -58,6 +58,8 @@ public class Kernel {
     private long currentCycle;
     private long cyclesExecuted;
     private long busyCycles;
+    private long suspensions;
+    private long reactivations;
     private int quantum;
 
     public Kernel(Computer computer, SchedulingPolicyType initialPolicy, int quantum) {
@@ -392,6 +394,17 @@ public IOProcessManager getIoProcessManager() {
         }
     }
 
+    public void notifyDiskDispatch(String processName, int block, String policy) {
+        for (StateChangeListener listener : stateListeners) {
+            listener.onDiskDispatch(processName, block, policy);
+        }
+    }
+
+    public void setDiskPolicy(avilaos.model.enumeration.DiskPolicyType policy) {
+        if (ioProcessManager == null) throw new IllegalStateException("No hay disco conectado");
+        ioProcessManager.getDiskScheduler().setPolicy(policy);
+    }
+
     public void removeStateChangeListener(StateChangeListener listener) {
         stateListeners.remove(listener);
     }
@@ -672,6 +685,7 @@ public IOProcessManager getIoProcessManager() {
         swapPending.remove(pcb.getId());
         if (request.getOperation() == IOOperationType.SUSPEND) {
             memoryManager.suspendProcess(pcb);
+            suspensions++;
             if (awakenedDuringSwap.remove(pcb.getId()) != null) {
                 for (Queue<PCB> queue : blockedQueues) queue.remove(pcb);
                 pcb.setBlockReason(null);
@@ -682,6 +696,7 @@ public IOProcessManager getIoProcessManager() {
             }
         } else if (request.getOperation() == IOOperationType.RESUME) {
             releaseSwap(pcb);
+            reactivations++;
             readySuspendedQueue.remove(pcb);
             pcb.setState(ProcessState.READY);
             scheduler.addToReady(pcb);
@@ -697,6 +712,9 @@ public IOProcessManager getIoProcessManager() {
         if (first != null && ioProcessManager != null)
             ioProcessManager.getFileSystemManager().getBlockMap().releaseSwap(first);
     }
+
+    public long getSuspensionCount() { return suspensions; }
+    public long getReactivationCount() { return reactivations; }
 
     public Queue<PCB> getReadyQueue() {
         return scheduler.getReadyQueue();

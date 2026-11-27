@@ -124,11 +124,11 @@ paralelo cuando exista lo que necesitan (ver *Depende de* en cada bloque).
 
 **Depende de:** Bloques 1 y 4.
 
-- [ ] Desplazamiento total del cabezal
-- [ ] Tiempo promedio de espera en la cola de E/S
-- [ ] Solicitudes atendidas por cada política
-- [ ] Cantidad de suspensiones y reactivaciones
-- [ ] Gráfico: desplazamiento acumulado del cabezal vs. tiempo
+- [x] Desplazamiento total del cabezal
+- [x] Tiempo promedio de espera en la cola de E/S
+- [x] Solicitudes atendidas por cada política
+- [x] Cantidad de suspensiones y reactivaciones
+- [x] Gráfico: desplazamiento acumulado del cabezal vs. tiempo
 - [ ] Se mantienen las métricas del Proyecto 1
 
 ## Bloque 9 - Informe, UML y defensa
@@ -136,7 +136,7 @@ paralelo cuando exista lo que necesitan (ver *Depende de* en cada bloque).
 - [ ] Informe: clases y métodos principales, enums e interfaces
 - [ ] 2 diagramas UML actualizados
 - [ ] Conclusiones: comparación de políticas (desplazamiento y espera) y efecto de la suspensión
-- [ ] Probar que corre en NetBeans con Java 21+
+- [x] Probar que corre en NetBeans con Java 21+
 - [ ] Commits equilibrados entre los 3 integrantes
 - [ ] Issues cerrados y PRs comentados
 - [ ] Todos conocen todos los módulos para la defensa

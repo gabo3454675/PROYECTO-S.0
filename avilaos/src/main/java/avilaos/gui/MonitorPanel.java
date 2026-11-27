@@ -7,6 +7,7 @@ import avilaos.kernel.Kernel;
 import avilaos.kernel.sync.Buffer;
 import avilaos.metrics.MetricsSnapshot;
 import avilaos.model.enumeration.BlockReason;
+import avilaos.model.enumeration.DiskPolicyType;
 import avilaos.model.enumeration.ProcessState;
 import avilaos.model.enumeration.SchedulingPolicyType;
 import avilaos.model.enumeration.UserMode;
@@ -24,6 +25,8 @@ import org.jfree.chart.plot.PlotOrientation;
 import org.jfree.chart.renderer.category.BarRenderer;
 import org.jfree.data.category.DefaultCategoryDataset;
 import org.jfree.data.general.DefaultPieDataset;
+import org.jfree.data.xy.XYSeries;
+import org.jfree.data.xy.XYSeriesCollection;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
@@ -65,6 +68,11 @@ public class MonitorPanel extends JPanel {
     private JLabel lblProducedElements;
     private JLabel lblConsumedElements;
     private JLabel lblRunningProcess;
+    private JLabel lblDiskMovement;
+    private JLabel lblDiskWait;
+    private JLabel lblPolicyCounts;
+    private JLabel lblSwapCounts;
+    private final XYSeries diskMovementSeries = new XYSeries("Desplazamiento acumulado");
     private boolean updatingControls;
 
     // Panel de CPU / Estado
@@ -94,6 +102,7 @@ public class MonitorPanel extends JPanel {
     private final DefaultPieDataset<String> processStateDataset = new DefaultPieDataset<>();
     private JFreeChart cpuChart;
     private JFreeChart processStateChart;
+    private JFreeChart diskChart;
     private Timer automaticCycleTimer;
 
     public MonitorPanel(Kernel kernel) {
@@ -226,6 +235,15 @@ public class MonitorPanel extends JPanel {
         dashboardContent.add(metricsPanel);
         dashboardContent.add(Box.createVerticalStrut(14));
 
+        JPanel diskMetrics = new JPanel(new GridLayout(1, 4, 12, 12));
+        diskMetrics.add(createMetricCard("DESPLAZAMIENTO DEL DISCO", "0 bloques", value -> lblDiskMovement = value));
+        diskMetrics.add(createMetricCard("ESPERA PROMEDIO DE E/S", "0.00 ciclos", value -> lblDiskWait = value));
+        diskMetrics.add(createMetricCard("SOLICITUDES POR POLÍTICA", "FIFO 0 · SSTF 0 · SCAN 0 · C-SCAN 0",
+                value -> lblPolicyCounts = value));
+        diskMetrics.add(createMetricCard("SUSPENSIONES / REACTIVACIONES", "0 / 0", value -> lblSwapCounts = value));
+        dashboardContent.add(diskMetrics);
+        dashboardContent.add(Box.createVerticalStrut(14));
+
         JPanel logPanel = createCard("Registro de eventos");
         logPanel.setLayout(new BorderLayout());
         JCheckBox cycleEvents = new JCheckBox("Mostrar cada ciclo");
@@ -267,6 +285,12 @@ public class MonitorPanel extends JPanel {
         chartsPanel.add(createChartCard(cpuChart));
         chartsPanel.add(createChartCard(processStateChart));
         dashboardContent.add(chartsPanel);
+        dashboardContent.add(Box.createVerticalStrut(14));
+
+        diskChart = ChartFactory.createXYLineChart(
+                "Desplazamiento acumulado del cabezal", "Ciclo", "Bloques",
+                new XYSeriesCollection(diskMovementSeries), PlotOrientation.VERTICAL, false, true, false);
+        dashboardContent.add(createChartCard(diskChart));
         dashboardContent.add(Box.createVerticalStrut(14));
 
         JPanel statusPanel = new JPanel(new GridLayout(1, 2, 12, 0));
@@ -491,6 +515,12 @@ public class MonitorPanel extends JPanel {
             public void onSwapEvent(PCB pcb, String message) {
                 appendLog("Nodo " + computerId + ": " + message + ".");
             }
+
+            @Override
+            public void onDiskDispatch(String processName, int block, String policy) {
+                appendLog("Nodo " + computerId + ": El disco atiende la solicitud de "
+                        + processName + " en el bloque " + block + " (" + policy + ").");
+            }
         });
     }
 
@@ -589,6 +619,7 @@ public class MonitorPanel extends JPanel {
         }
         updatingControls = false;
         updateGlobalMetrics();
+        updateDiskMetrics();
 
         // Actualizar datos de CPU de forma pasiva (sin alterar el planificador)
         CPU cpu = (kernel.getComputer() != null) ? kernel.getComputer().getCpu() : null;
@@ -640,6 +671,26 @@ public class MonitorPanel extends JPanel {
         lblSemaphoreWait.setText(String.format("%.2f ciclos", metrics.avgSemaphoreBlockedCycles()));
         lblProducedElements.setText(Long.toString(metrics.producedElements()));
         lblConsumedElements.setText(Long.toString(metrics.consumedElements()));
+    }
+
+    private void updateDiskMetrics() {
+        var disk = kernel.getComputer().getDisk();
+        if (disk == null) {
+            lblDiskMovement.setText("Sin disco");
+            lblDiskWait.setText("—");
+            lblPolicyCounts.setText("—");
+            lblSwapCounts.setText("—");
+            return;
+        }
+        lblDiskMovement.setText(disk.getTotalHeadMovement() + " bloques");
+        lblDiskWait.setText(String.format("%.2f ciclos", disk.getAverageQueueWaitCycles()));
+        lblPolicyCounts.setText("FIFO " + disk.getRequestsByPolicy(DiskPolicyType.FIFO)
+                + " · SSTF " + disk.getRequestsByPolicy(DiskPolicyType.SSTF)
+                + " · SCAN " + disk.getRequestsByPolicy(DiskPolicyType.SCAN)
+                + " · C-SCAN " + disk.getRequestsByPolicy(DiskPolicyType.C_SCAN));
+        lblSwapCounts.setText(kernel.getSuspensionCount() + " / " + kernel.getReactivationCount());
+        long cycle = simulation == null ? kernel.getCurrentCycle() : simulation.getCurrentCycle();
+        diskMovementSeries.addOrUpdate(cycle, disk.getTotalHeadMovement());
     }
 
     private void updateCharts() {
@@ -1078,6 +1129,7 @@ public class MonitorPanel extends JPanel {
 
         styleChart(cpuChart, cardColor, textColor);
         styleChart(processStateChart, cardColor, textColor);
+        styleChart(diskChart, cardColor, textColor);
         styleComponentsDark(this, bgColor, cardColor, textColor, mainFont, titleFont);
     }
 
@@ -1099,6 +1151,13 @@ public class MonitorPanel extends JPanel {
             plot.getRangeAxis().setLabelPaint(foreground);
             plot.getRangeAxis().setTickLabelPaint(foreground);
             ((org.jfree.chart.axis.NumberAxis) plot.getRangeAxis()).setRange(0, 100);
+        } else if (chart.getPlot() instanceof org.jfree.chart.plot.XYPlot plot) {
+            plot.setDomainGridlinePaint(new Color(55, 65, 80));
+            plot.setRangeGridlinePaint(new Color(55, 65, 80));
+            plot.getDomainAxis().setLabelPaint(foreground);
+            plot.getDomainAxis().setTickLabelPaint(foreground);
+            plot.getRangeAxis().setLabelPaint(foreground);
+            plot.getRangeAxis().setTickLabelPaint(foreground);
         } else if (chart.getPlot() instanceof PiePlot<?> plot) {
             plot.setLabelPaint(foreground);
             plot.setLabelBackgroundPaint(background);

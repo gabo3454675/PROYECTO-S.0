@@ -22,6 +22,8 @@ public final class Project2DiskPanel extends JPanel {
     private final JTree fileTree = new JTree();
     private final DefaultTableModel blockModel = new DefaultTableModel(
             new String[]{"Bloque", "Uso", "Archivo / proceso", "Siguiente"}, 0);
+    private final DefaultTableModel allocationModel = new DefaultTableModel(
+            new String[]{"Archivo", "Bloques", "Primer bloque", "Dueño", "Proceso creador", "Color"}, 0);
     private final DefaultTableModel requestModel = new DefaultTableModel(
             new String[]{"Proceso", "Operación", "Bloque", "Llegada"}, 0);
     private final JComboBox<DiskPolicyType> policy = new JComboBox<>(DiskPolicyType.values());
@@ -38,8 +40,7 @@ public final class Project2DiskPanel extends JPanel {
         controls.add(diskStatus);
         controls.add(new JLabel("Política de disco"));
         policy.setSelectedItem(computer.getKernel().getIoProcessManager().getDiskScheduler().getPolicyType());
-        policy.addActionListener(e -> computer.getKernel().getIoProcessManager()
-                .getDiskScheduler().setPolicy((DiskPolicyType) policy.getSelectedItem()));
+        policy.addActionListener(e -> computer.getKernel().setDiskPolicy((DiskPolicyType) policy.getSelectedItem()));
         controls.add(policy);
         JButton refresh = new JButton("Actualizar");
         refresh.addActionListener(e -> refresh());
@@ -61,12 +62,20 @@ public final class Project2DiskPanel extends JPanel {
         files.add(new JScrollPane(fileTree), BorderLayout.CENTER);
         files.add(fileDetails, BorderLayout.SOUTH);
 
+        JTable allocations = new JTable(allocationModel);
+        allocations.setAutoCreateRowSorter(true);
+        JPanel allocationPanel = new JPanel(new BorderLayout());
+        allocationPanel.setBorder(BorderFactory.createTitledBorder("Asignación de archivos"));
+        allocationPanel.add(new JScrollPane(allocations), BorderLayout.CENTER);
+
         JTable blocks = new JTable(blockModel);
         blocks.setAutoCreateRowSorter(true);
         JPanel map = new JPanel(new BorderLayout());
         map.setBorder(BorderFactory.createTitledBorder("Mapa de bloques"));
         map.add(new JScrollPane(blocks), BorderLayout.CENTER);
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, files, map);
+        JSplitPane diskTables = new JSplitPane(JSplitPane.VERTICAL_SPLIT, allocationPanel, map);
+        diskTables.setResizeWeight(0.35);
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, files, diskTables);
         split.setResizeWeight(0.35);
         add(split, BorderLayout.CENTER);
 
@@ -104,6 +113,8 @@ public final class Project2DiskPanel extends JPanel {
         for (DiskRequest request : computer.getKernel().getIoProcessManager()
                 .getDiskScheduler().snapshotQueue()) addRequest(request, "");
         FileSystemNode root = computer.getKernel().getIoProcessManager().getFileSystemManager().getRoot();
+        allocationModel.setRowCount(0);
+        addAllocations(root, map);
         String selectedPath = null;
         if (fileTree.getLastSelectedPathComponent() instanceof DefaultMutableTreeNode selected
                 && selected.getUserObject() instanceof FileSystemNode node) selectedPath = node.getPath();
@@ -119,6 +130,22 @@ public final class Project2DiskPanel extends JPanel {
     private void addRequest(DiskRequest request, String prefix) {
         requestModel.addRow(new Object[]{request.getProcessName(), prefix + request.getOperation().getDisplayName(),
                 request.getTargetBlock(), request.getArrivalCycle()});
+    }
+
+    private void addAllocations(FileSystemNode node, DiskBlockMap map) {
+        if (node.isDirectory()) {
+            for (FileSystemNode child : node.getChildren()) addAllocations(child, map);
+            return;
+        }
+        StringBuilder blocks = new StringBuilder();
+        int current = node.getFirstBlock();
+        for (int i = 0; i < node.getSizeInBlocks() && current != DiskBlock.NO_NEXT; i++) {
+            if (i > 0) blocks.append(", ");
+            blocks.append(current);
+            current = map.getBlock(current).getNext();
+        }
+        allocationModel.addRow(new Object[]{node.getPath(), blocks.toString(), node.getFirstBlock(),
+                node.getOwner(), node.getCreatorProcessId(), node.getColorHex()});
     }
 
     private DefaultMutableTreeNode treeNode(FileSystemNode node) {

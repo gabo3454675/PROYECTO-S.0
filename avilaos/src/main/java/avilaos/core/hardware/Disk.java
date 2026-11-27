@@ -8,6 +8,7 @@ import avilaos.model.disk.DiskRequest;
 import avilaos.model.disk.DiskSelection;
 import avilaos.model.enumeration.HeadDirection;
 import avilaos.model.enumeration.IOOperationType;
+import avilaos.model.enumeration.DiskPolicyType;
 import avilaos.model.enumeration.SeekMode;
 import avilaos.model.interfaces.ClockListener;
 import avilaos.model.pcb.PCB;
@@ -27,6 +28,10 @@ public final class Disk implements ClockListener {
     private int serviceCyclesRemaining;
     private long totalHeadMovement;
     private long completedRequests;
+    private long totalQueueWaitCycles;
+    private long dispatchedRequests;
+    private final long[] requestsByPolicy = new long[DiskPolicyType.values().length];
+    private DiskPolicyType activePolicy;
 
     public Disk(DiskScheduler scheduler, FileSystemManager fileSystem, Kernel kernel,
                 int initialHead, HeadDirection initialDirection, int positionsPerCycle) {
@@ -50,6 +55,12 @@ public final class Disk implements ClockListener {
         if (active == null) {
             active = scheduler.dispatch(headPosition, direction, totalBlocks);
             if (active == null) return;
+            DiskPolicyType selectedPolicy = scheduler.getPolicyType();
+            activePolicy = selectedPolicy;
+            dispatchedRequests++;
+            totalQueueWaitCycles += Math.max(0, cycle - active.request().getArrivalCycle());
+            kernel.notifyDiskDispatch(active.request().getProcessName(),
+                    active.request().getTargetBlock(), selectedPolicy.name());
             stage = 0;
             seekTarget = active.seekMode() == SeekMode.DIRECT
                     ? active.request().getTargetBlock()
@@ -85,6 +96,7 @@ public final class Disk implements ClockListener {
                 direction = active.directionAfter();
                 active = null;
                 completedRequests++;
+                requestsByPolicy[activePolicy.ordinal()]++;
                 kernel.getIoProcessManager().completeDiskRequest(completed, kernel);
             }
         }
@@ -109,5 +121,9 @@ public final class Disk implements ClockListener {
     public DiskRequest getActiveRequest() { return active == null ? null : active.request(); }
     public long getTotalHeadMovement() { return totalHeadMovement; }
     public long getCompletedRequests() { return completedRequests; }
+    public double getAverageQueueWaitCycles() {
+        return dispatchedRequests == 0 ? 0 : (double) totalQueueWaitCycles / dispatchedRequests;
+    }
+    public long getRequestsByPolicy(DiskPolicyType policy) { return requestsByPolicy[policy.ordinal()]; }
     public int getPositionsPerCycle() { return positionsPerCycle; }
 }

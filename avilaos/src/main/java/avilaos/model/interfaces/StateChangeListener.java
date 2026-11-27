@@ -17,4 +17,7 @@ public interface StateChangeListener {
 
     default void onSwapEvent(PCB pcb, String message) {
     }
+
+    default void onDiskDispatch(String processName, int block, String policy) {
+    }
 }
