@@ -1,0 +1,17 @@
+{
+  "diskConfig": {
+    "totalBlocks": 200,
+    "initialHead": 50,
+    "positionsPerCycle": 10
+  },
+  "fileSystem": [
+    {"path": "/enunciado", "type": "DIRECTORY", "owner": "admin", "permissions": "public"},
+    {"path": "/enunciado/b82.dat", "type": "FILE", "startBlock": 82, "blocks": 1, "owner": "admin", "permissions": "public"},
+    {"path": "/enunciado/b17.dat", "type": "FILE", "startBlock": 17, "blocks": 1, "owner": "admin", "permissions": "public"},
+    {"path": "/enunciado/b43.dat", "type": "FILE", "startBlock": 43, "blocks": 1, "owner": "admin", "permissions": "public"},
+    {"path": "/enunciado/b140.dat", "type": "FILE", "startBlock": 140, "blocks": 1, "owner": "admin", "permissions": "public"},
+    {"path": "/enunciado/b24.dat", "type": "FILE", "startBlock": 24, "blocks": 1, "owner": "admin", "permissions": "public"},
+    {"path": "/enunciado/b16.dat", "type": "FILE", "startBlock": 16, "blocks": 1, "owner": "admin", "permissions": "public"},
+    {"path": "/enunciado/b190.dat", "type": "FILE", "startBlock": 190, "blocks": 1, "owner": "admin", "permissions": "public"}
+  ]
+}

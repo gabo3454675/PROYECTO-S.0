@@ -1,0 +1,21 @@
+{
+  "globalConfig": {
+    "cycleDurationMs": 100,
+    "swapSizeBlocks": 0,
+    "initialDiskPolicy": "FIFO"
+  },
+  "computer": {
+    "ramCapacity": 128,
+    "policy": "FCFS",
+    "quantum": 0
+  },
+  "processes": [
+    {"name": "Leer82", "memory": 1, "deadline": 5000, "instructions": 1, "targetPath": "/enunciado/b82.dat", "operation": "READ"},
+    {"name": "Leer17", "memory": 1, "deadline": 5000, "instructions": 1, "targetPath": "/enunciado/b17.dat", "operation": "READ"},
+    {"name": "Leer43", "memory": 1, "deadline": 5000, "instructions": 1, "targetPath": "/enunciado/b43.dat", "operation": "READ"},
+    {"name": "Leer140", "memory": 1, "deadline": 5000, "instructions": 1, "targetPath": "/enunciado/b140.dat", "operation": "READ"},
+    {"name": "Leer24", "memory": 1, "deadline": 5000, "instructions": 1, "targetPath": "/enunciado/b24.dat", "operation": "READ"},
+    {"name": "Leer16", "memory": 1, "deadline": 5000, "instructions": 1, "targetPath": "/enunciado/b16.dat", "operation": "READ"},
+    {"name": "Leer190", "memory": 1, "deadline": 5000, "instructions": 1, "targetPath": "/enunciado/b190.dat", "operation": "READ"}
+  ]
+}
